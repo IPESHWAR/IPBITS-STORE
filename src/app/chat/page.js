@@ -309,6 +309,7 @@ export default function ChatPage() {
   const fileInputRef = useRef(null);
   const codeFileInputRef = useRef(null);
   const cameraInputRef = useRef(null);
+  const driveFileInputRef = useRef(null);
   const toastTimer = useRef(null);
 
   const credits = useMemo(() => getAccessCredits(license), [license]);
@@ -595,6 +596,7 @@ export default function ChatPage() {
     if (fileInputRef.current) fileInputRef.current.value = '';
     if (codeFileInputRef.current) codeFileInputRef.current.value = '';
     if (cameraInputRef.current) cameraInputRef.current.value = '';
+    if (driveFileInputRef.current) driveFileInputRef.current.value = '';
   };
 
   const openAttachSheet = () => {
@@ -608,9 +610,10 @@ export default function ChatPage() {
   const closeAttachSheet = () => setAttachSheetOpen(false);
 
   const triggerPicker = (ref) => {
+    // Fire native picker in the same user-gesture turn (required on iOS),
+    // then close the sheet. onChange also closes if a file is selected.
+    ref.current?.click();
     closeAttachSheet();
-    // Allow sheet close animation to settle before native picker opens
-    window.setTimeout(() => ref.current?.click(), 180);
   };
 
   const handleSend = async (e) => {
@@ -932,6 +935,14 @@ export default function ChatPage() {
           className="hidden"
           disabled={!accessUnlocked}
         />
+        <input
+          type="file"
+          accept=".pdf,.doc,.docx,.txt,.json,.csv,.zip"
+          ref={driveFileInputRef}
+          onChange={handleCodeFileUpload}
+          className="hidden"
+          disabled={!accessUnlocked}
+        />
 
         <form
           onSubmit={handleSend}
@@ -1029,10 +1040,7 @@ export default function ChatPage() {
 
               <button
                 type="button"
-                onClick={() => {
-                  closeAttachSheet();
-                  showToast(c.attachAiDriveSoon || c.attachAiDrive || 'AI Drive');
-                }}
+                onClick={() => triggerPicker(driveFileInputRef)}
                 className="w-full flex items-center gap-3 px-3.5 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/[0.06] transition-all active:scale-[0.99] cursor-pointer text-start"
               >
                 <span className="h-9 w-9 rounded-full bg-white/[0.05] border border-white/10 inline-flex items-center justify-center shrink-0">
