@@ -427,8 +427,8 @@ export const PAYMENT_ACCOUNTS = {
 
 export const CHECKOUT_PAYMENT_METHODS = ['FIB', 'FastPay', 'ZainCash', 'QiCard'];
 
-export const TELEGRAM_USERNAME = 'ipbitss';
-export const TELEGRAM_URL = 'https://t.me/ipbitss';
+export const TELEGRAM_USERNAME = 'ipeshwar';
+export const TELEGRAM_URL = 'https://t.me/ipeshwar';
 
 export function isTelegramOrder(product) {
   return product?.orderType === 'telegram' || product?.deliveryType === 'manual';
