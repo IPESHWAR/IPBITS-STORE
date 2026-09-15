@@ -1,27 +1,38 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
-// گرێدان ب داتابەیسا Supabase
+// گرێدان ب داتابەیسا Supabase ب کلیلا Service Role یان Anon
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
-const supabase = createClient(supabaseUrl, supabaseAnonKey);
+const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+const supabase = createClient(supabaseUrl, supabaseKey);
 
 export async function POST(req) {
   try {
     const { messages, model, userEmail } = await req.json();
 
-    // ١. ئینانا خۆکار یا کلیلا وی کڕیاری ژ تابلۆیێ profiles
+    // ١. ئینانا زانیاریێن کڕیاری و پشکنینا باڵانسی ژ profiles
     let activeApiKey = process.env.OPENROUTER_API_KEY;
+    let userProfile = null;
 
     if (userEmail) {
       const { data: profile } = await supabase
         .from('profiles')
-        .select('api_key')
+        .select('id, email, api_key, points')
         .eq('email', userEmail)
         .single();
 
-      if (profile?.api_key) {
-        activeApiKey = profile.api_key;
+      if (profile) {
+        userProfile = profile;
+        if (profile.api_key) {
+          activeApiKey = profile.api_key;
+        }
+        // ئەگەر خاڵێن وی تەمام بووبن (٠ یان کێمتر)
+        if (profile.points !== undefined && profile.points <= 0) {
+          return NextResponse.json(
+            { error: "خاڵێن (Points) تە ب داوی هاتینە، هیڤییە باڵانسێ خۆ نووی بکەڤە." },
+            { status: 403 }
+          );
+        }
       }
     }
 
@@ -58,10 +69,33 @@ export async function POST(req) {
       );
       const generatedImageUrl = `https://image.pollinations.ai/prompt/${cleanPrompt}?width=1024&height=1024&nologo=true&model=flux`;
 
-      return NextResponse.json({ reply: `![AI Image](${generatedImageUrl})` });
+      // کێمکرنا خاڵێن وێنەی د داتابەیسێ دا (٢ خاڵ)
+      if (userProfile?.id && userProfile.points !== undefined) {
+        await supabase
+          .from('profiles')
+          .update({ points: Math.max(0, userProfile.points - 2) })
+          .eq('id', userProfile.id);
+
+        // تۆمارکرن د مێژوویا خاڵان دا (points_ledger)
+        await supabase.from('points_ledger').insert({
+          profile_id: userProfile.id,
+          points_change: -2,
+          action_type: 'image_generation',
+          model_used: 'flux-pollinations',
+          cost_usd: 0.002,
+        });
+      }
+
+      return NextResponse.json({
+        reply: `![AI Image](${generatedImageUrl})`,
+        usage: { total_tokens: 0, cost: 0.002 },
+        cost_usd: 0.002,
+        points_spent: 2,
+        remaining_points: userProfile?.points ? userProfile.points - 2 : null,
+      });
     }
 
-    // ٣. هنارتنا پرسیارێ ب کلیلا تایبەت یا وی کڕیاری بۆ OpenRouter
+    // ٣. هنارتنا پرسیارێ بۆ OpenRouter
     const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -84,8 +118,57 @@ export async function POST(req) {
     }
 
     const reply = data.choices?.[0]?.message?.content || "بەرسڤ نەهات.";
-    return NextResponse.json({ reply });
+    const usage = data.usage || null;
 
+    // حیسابکرنا بهایی (دۆلار) وەرگیراو ژ OpenRouter
+    let costUsd = Number(usage?.cost ?? usage?.total_cost);
+    if (!Number.isFinite(costUsd) || costUsd < 0) {
+      const tokens = Number(
+        usage?.total_tokens ??
+          Number(usage?.prompt_tokens || 0) + Number(usage?.completion_tokens || 0)
+      );
+      const isFree = String(model || '').includes(':free');
+      if (Number.isFinite(tokens) && tokens > 0) {
+        costUsd = isFree ? (tokens / 1_000_000) * 0.05 : (tokens / 1_000_000) * 0.5;
+      } else {
+        costUsd = isFree ? 0 : 0.001;
+      }
+    }
+
+    // هەر $1 = 1,000 پۆینت ($0.001 = 1 point)
+    const pointsSpent = Math.max(
+      costUsd > 0 ? 1 : 0,
+      Math.ceil(costUsd * 1000)
+    );
+
+    // ٤. کێمکرنا پۆینتان د داتابەیسێ دا
+    let remainingPoints = null;
+    if (userProfile?.id && userProfile.points !== undefined) {
+      remainingPoints = Math.max(0, userProfile.points - pointsSpent);
+      await supabase
+        .from('profiles')
+        .update({ points: remainingPoints })
+        .eq('id', userProfile.id);
+
+      // تۆمارکرن د مێژوویا خاڵان دا (points_ledger)
+      if (pointsSpent > 0) {
+        await supabase.from('points_ledger').insert({
+          profile_id: userProfile.id,
+          points_change: -pointsSpent,
+          action_type: 'chat',
+          model_used: model || 'openai/gpt-4o-mini',
+          cost_usd: costUsd,
+        });
+      }
+    }
+
+    return NextResponse.json({
+      reply,
+      usage,
+      cost_usd: costUsd,
+      points_spent: pointsSpent,
+      remaining_points: remainingPoints,
+    });
   } catch (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }

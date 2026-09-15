@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Apple Gift Card">
+  <defs>
+    <linearGradient id="agc-facet" x1="8" y1="6" x2="56" y2="58" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#FF375F"/>
+      <stop offset="18%" stop-color="#FF9F0A"/>
+      <stop offset="36%" stop-color="#FFD60A"/>
+      <stop offset="54%" stop-color="#30D158"/>
+      <stop offset="72%" stop-color="#64D2FF"/>
+      <stop offset="86%" stop-color="#0A84FF"/>
+      <stop offset="100%" stop-color="#BF5AF2"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="14" fill="#F5F5F7"/>
+  <path fill="url(#agc-facet)" d="M44.8 33.6c-.1-6.2 5.1-9.2 5.3-9.3-2.9-4.2-7.4-4.8-9-4.9-3.8-.4-7.5 2.3-9.4 2.3-2 0-5-2.2-8.2-2.2-4.2.1-8.1 2.5-10.3 6.2-4.4 7.6-1.1 18.9 3.2 25.1 2.1 3 4.6 6.4 7.9 6.3 3.2-.1 4.3-2 8.1-2 3.8 0 4.8 2 8.1 1.9 3.4-.1 5.5-3.1 7.5-6.1 2.4-3.5 3.4-6.8 3.4-7-.1 0-6.5-2.5-6.6-10.3zM38.3 14.9c1.7-2.1 2.9-5 2.6-7.9-2.5.1-5.5 1.7-7.3 3.8-1.6 1.8-3 4.8-2.6 7.6 2.8.2 5.6-1.4 7.3-3.5z"/>
+</svg>
