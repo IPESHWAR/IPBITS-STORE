@@ -11,7 +11,7 @@ import {
   Plus,
   Camera,
   FileText,
-  FolderHeart,
+  Folder,
   Check,
   Copy,
   Download,
@@ -994,45 +994,58 @@ export default function ChatPage() {
             <button
               type="button"
               aria-label={c.closeAttachSheet || 'Close'}
-              className="absolute inset-0 bg-black/60 backdrop-blur-md cursor-pointer border-0"
+              className="absolute inset-0 bg-black/50 dark:bg-black/60 backdrop-blur-md cursor-pointer border-0"
               onClick={closeAttachSheet}
             />
             <div
               role="dialog"
               aria-modal="true"
               aria-label={c.attachMenuTitle || 'Attachments'}
-              className="relative z-10 w-full max-w-lg mx-auto bg-[#121216]/95 border-t border-white/10 p-5 rounded-t-2xl shadow-2xl pb-[max(1.25rem,env(safe-area-inset-bottom))] animate-[chatSheetUp_0.28s_cubic-bezier(0.22,1,0.36,1)]"
+              dir={dir || (isRtl ? 'rtl' : 'ltr')}
+              className="relative z-10 w-full max-w-lg mx-auto rounded-t-3xl border-t p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-2xl backdrop-blur-xl animate-[chatSheetUp_0.28s_cubic-bezier(0.22,1,0.36,1)] bg-white/95 border-neutral-200 text-neutral-800 dark:bg-[#111216]/90 dark:border-white/10 dark:text-neutral-200"
             >
-              <div className="w-10 h-1 bg-white/20 rounded-full mx-auto mb-4" aria-hidden="true" />
+              <div
+                className="w-9 h-1 rounded-full mx-auto mb-5 bg-neutral-300 dark:bg-neutral-700"
+                aria-hidden="true"
+              />
 
               <div className="grid grid-cols-3 gap-3 mb-4">
                 <button
                   type="button"
                   onClick={() => triggerPicker(cameraInputRef)}
-                  className="flex flex-col items-center justify-center p-4 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] active:scale-95 border border-white/5 transition-all cursor-pointer gap-2"
+                  className="flex flex-col items-center justify-center gap-2 p-4 rounded-2xl border transition-all duration-200 active:scale-95 cursor-pointer bg-neutral-50 hover:bg-neutral-100 border-neutral-200/80 dark:bg-white/[0.03] dark:hover:bg-white/[0.08] dark:border-white/5"
                 >
-                  <Camera size={22} className="text-sky-300" strokeWidth={1.75} />
-                  <span className="text-[11px] sm:text-xs font-medium text-white/80">
+                  <Camera
+                    className="w-5 h-5 text-sky-600/85 dark:text-sky-300/90 drop-shadow-sm"
+                    strokeWidth={1.75}
+                  />
+                  <span className="text-xs font-medium tracking-tight text-neutral-700 dark:text-neutral-300">
                     {c.attachCamera || 'Camera'}
                   </span>
                 </button>
                 <button
                   type="button"
                   onClick={() => triggerPicker(fileInputRef)}
-                  className="flex flex-col items-center justify-center p-4 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] active:scale-95 border border-white/5 transition-all cursor-pointer gap-2"
+                  className="flex flex-col items-center justify-center gap-2 p-4 rounded-2xl border transition-all duration-200 active:scale-95 cursor-pointer bg-neutral-50 hover:bg-neutral-100 border-neutral-200/80 dark:bg-white/[0.03] dark:hover:bg-white/[0.08] dark:border-white/5"
                 >
-                  <ImageIcon size={22} className="text-emerald-300" strokeWidth={1.75} />
-                  <span className="text-[11px] sm:text-xs font-medium text-white/80">
+                  <ImageIcon
+                    className="w-5 h-5 text-emerald-600/85 dark:text-emerald-300/90 drop-shadow-sm"
+                    strokeWidth={1.75}
+                  />
+                  <span className="text-xs font-medium tracking-tight text-neutral-700 dark:text-neutral-300">
                     {c.attachPhotos || 'Photos'}
                   </span>
                 </button>
                 <button
                   type="button"
                   onClick={() => triggerPicker(codeFileInputRef)}
-                  className="flex flex-col items-center justify-center p-4 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] active:scale-95 border border-white/5 transition-all cursor-pointer gap-2"
+                  className="flex flex-col items-center justify-center gap-2 p-4 rounded-2xl border transition-all duration-200 active:scale-95 cursor-pointer bg-neutral-50 hover:bg-neutral-100 border-neutral-200/80 dark:bg-white/[0.03] dark:hover:bg-white/[0.08] dark:border-white/5"
                 >
-                  <FileText size={22} className="text-violet-300" strokeWidth={1.75} />
-                  <span className="text-[11px] sm:text-xs font-medium text-white/80">
+                  <FileText
+                    className="w-5 h-5 text-violet-600/85 dark:text-violet-300/90 drop-shadow-sm"
+                    strokeWidth={1.75}
+                  />
+                  <span className="text-xs font-medium tracking-tight text-neutral-700 dark:text-neutral-300">
                     {c.attachFiles || 'Files'}
                   </span>
                 </button>
@@ -1041,20 +1054,25 @@ export default function ChatPage() {
               <button
                 type="button"
                 onClick={() => triggerPicker(driveFileInputRef)}
-                className="w-full flex items-center gap-3 px-3.5 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/[0.06] transition-all active:scale-[0.99] cursor-pointer text-start"
+                className="w-full flex items-center gap-3 px-3.5 py-3 rounded-full border transition-all duration-200 active:scale-[0.99] cursor-pointer text-start bg-neutral-50 hover:bg-neutral-100 border-neutral-200/80 dark:bg-white/[0.03] dark:hover:bg-white/[0.08] dark:border-white/5"
               >
-                <span className="h-9 w-9 rounded-full bg-white/[0.05] border border-white/10 inline-flex items-center justify-center shrink-0">
-                  <FolderHeart size={16} className="text-amber-300/90" strokeWidth={1.75} />
+                <span className="h-9 w-9 rounded-full inline-flex items-center justify-center shrink-0 bg-neutral-100 border border-neutral-200/80 dark:bg-white/[0.05] dark:border-white/10">
+                  <Folder
+                    className="w-4 h-4 text-amber-600/90 dark:text-amber-300/90"
+                    strokeWidth={1.75}
+                  />
                 </span>
                 <span className="min-w-0 flex-1">
-                  <span className="block text-xs font-medium text-white/85">
+                  <span className="block text-xs font-medium tracking-tight text-neutral-800 dark:text-neutral-200">
                     {c.attachAiDrive || 'From AI Drive'}
                   </span>
-                  <span className="block text-[10px] text-white/40 mt-0.5 truncate">
-                    {c.attachAiDriveHint || ''}
-                  </span>
+                  {c.attachAiDriveHint ? (
+                    <span className="block text-[10px] text-neutral-500 dark:text-neutral-400 mt-0.5 truncate" dir="auto">
+                      {c.attachAiDriveHint}
+                    </span>
+                  ) : null}
                 </span>
-                <Sparkles size={14} className="text-white/30 shrink-0" />
+                <Sparkles className="w-3.5 h-3.5 text-neutral-400 dark:text-neutral-500 shrink-0 opacity-80" strokeWidth={1.75} />
               </button>
             </div>
           </div>,
