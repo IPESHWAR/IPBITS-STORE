@@ -50,7 +50,7 @@ export default function ChatHeader({
   return (
     <header
       dir="ltr"
-      className="sticky top-0 z-30 h-14 w-full backdrop-blur-xl bg-black/40 border-b border-white/[0.08] px-5 flex items-center justify-between"
+      className="sticky top-0 z-30 h-14 w-full shrink-0 backdrop-blur-xl bg-black/40 border-b border-white/[0.08] px-5 flex items-center justify-between"
     >
       <div className="flex min-w-0 items-center gap-2.5">
         <Link

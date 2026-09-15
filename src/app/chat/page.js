@@ -299,6 +299,8 @@ export default function ChatPage() {
   const [toast, setToast] = useState('');
 
   const chatEndRef = useRef(null);
+  const messagesRef = useRef(null);
+  const shellRef = useRef(null);
   const fileInputRef = useRef(null);
   const codeFileInputRef = useRef(null);
   const toastTimer = useRef(null);
@@ -319,6 +321,43 @@ export default function ChatPage() {
       if (toastTimer.current) window.clearTimeout(toastTimer.current);
     };
   }, []);
+
+  // Lock document scroll on /chat so only the messages list can move
+  useEffect(() => {
+    const html = document.documentElement;
+    const body = document.body;
+    html.classList.add('chat-viewport-lock');
+    body.classList.add('chat-viewport-lock');
+    return () => {
+      html.classList.remove('chat-viewport-lock');
+      body.classList.remove('chat-viewport-lock');
+    };
+  }, []);
+
+  // Keep shell height synced to the visual viewport (mobile keyboard)
+  useEffect(() => {
+    if (!hasSession) return undefined;
+    const shell = shellRef.current;
+    if (!shell) return undefined;
+
+    const vv = window.visualViewport;
+    const sync = () => {
+      const height = vv?.height ?? window.innerHeight;
+      const offsetTop = vv?.offsetTop ?? 0;
+      shell.style.height = `${Math.round(height)}px`;
+      shell.style.transform = offsetTop ? `translateY(${Math.round(offsetTop)}px)` : '';
+    };
+
+    sync();
+    vv?.addEventListener('resize', sync);
+    vv?.addEventListener('scroll', sync);
+    window.addEventListener('resize', sync);
+    return () => {
+      vv?.removeEventListener('resize', sync);
+      vv?.removeEventListener('scroll', sync);
+      window.removeEventListener('resize', sync);
+    };
+  }, [hasSession]);
 
   useEffect(() => {
     const session = readLicenseSession();
@@ -421,7 +460,12 @@ export default function ChatPage() {
 
   useEffect(() => {
     if (!hasSession) return;
-    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    const pane = messagesRef.current;
+    if (pane) {
+      pane.scrollTo({ top: pane.scrollHeight, behavior: 'smooth' });
+      return;
+    }
+    chatEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }, [messages, hasSession]);
 
   const pickerLabels = useMemo(
@@ -661,8 +705,9 @@ export default function ChatPage() {
 
   return (
     <div
+      ref={shellRef}
       dir={dir || (isRtl ? 'rtl' : 'ltr')}
-      className="min-h-screen w-full max-w-full overflow-x-hidden bg-[#090a0f] text-white flex flex-col justify-between font-sans selection:bg-sky-500/30"
+      className="chat-shell fixed inset-x-0 top-0 z-0 flex h-[100dvh] max-h-[100dvh] w-full max-w-full flex-col overflow-hidden overscroll-none bg-[#090a0f] text-white font-sans selection:bg-sky-500/30"
     >
       <ChatHeader
         backHref="/"
@@ -709,7 +754,10 @@ export default function ChatPage() {
         closable={accessUnlocked}
       />
 
-      <main className="flex-1 overflow-y-auto px-4 sm:px-6 py-5 sm:py-6 space-y-5 max-w-3xl w-full mx-auto">
+      <main
+        ref={messagesRef}
+        className="chat-messages min-h-0 flex-1 overflow-y-auto overscroll-y-contain px-4 sm:px-6 py-5 sm:py-6 space-y-5 max-w-3xl w-full mx-auto"
+      >
         {messages.map((m, idx) => (
           <div
             key={idx}
@@ -814,7 +862,7 @@ export default function ChatPage() {
         <div ref={chatEndRef} />
       </main>
 
-      <footer className="sticky bottom-0 z-20 w-full px-3 sm:px-4 pb-3 sm:pb-4 pt-2 bg-gradient-to-t from-[#090a0f] via-[#090a0f]/95 to-transparent">
+      <footer className="relative z-20 w-full shrink-0 px-3 sm:px-4 pt-2 pb-[max(0.75rem,env(safe-area-inset-bottom))] bg-gradient-to-t from-[#090a0f] via-[#090a0f]/95 to-transparent">
         <AttachmentChip
           attachment={attachment}
           onRemove={clearAttachment}
@@ -877,6 +925,11 @@ export default function ChatPage() {
             onChange={(e) => setInput(e.target.value)}
             onFocus={() => {
               if (!accessUnlocked) openRedeem();
+              // Keep composer visible above the keyboard without scrolling the document
+              window.requestAnimationFrame(() => {
+                const pane = messagesRef.current;
+                if (pane) pane.scrollTo({ top: pane.scrollHeight, behavior: 'smooth' });
+              });
             }}
             placeholder={accessUnlocked ? c.inputPlaceholder : c.lockedInputPlaceholder}
             disabled={!accessUnlocked}

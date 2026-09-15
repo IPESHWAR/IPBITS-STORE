@@ -47,9 +47,11 @@ async function startGeneration() {
     selectedTiers = TIERS;
     console.log(`🚀 دەستپێکرنا دروستکرنا هەموو پاکێجان (${inputCount} دانە بۆ هەر جۆرەکی)...`);
   } else {
-    const found = TIERS.find(t => t.id === inputTier || t.prefix.toLowerCase() === inputTier);
+    const aliases = { daily: 'test', day: 'test', '1d': 'test', '1_day': 'test', tst: 'test' };
+    const tierKey = aliases[inputTier] || inputTier;
+    const found = TIERS.find(t => t.id === tierKey || t.prefix.toLowerCase() === tierKey);
     if (!found) {
-      console.error(`❌ پاکێجا [${inputTier}] نەهاتە دیتن! پاکێجێن بەردەست ئەڤەنە: test, weekly, monthly, 3months, yearly`);
+      console.error(`❌ پاکێجا [${inputTier}] نەهاتە دیتن! پاکێجێن بەردەست ئەڤەنە: daily/test, weekly, monthly, 3months, yearly`);
       process.exit(1);
     }
     selectedTiers = [found];
