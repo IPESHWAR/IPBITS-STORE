@@ -320,7 +320,7 @@ export const TRANSLATIONS = {
       tiers: {
         '1_day': { name: 'تێست', duration: '٢٤ دەمژمێر', badge: 'تێست و ب لەز ⚡' },
         '7_days': { name: 'هەفتانە', duration: '١ هەفتە', badge: 'گونجای 👍' },
-        '30_days': { name: 'هەیڤانە', duration: '١ هەیڤ', badge: 'پڕفرۆشترین 🔥' },
+        '30_days': { name: 'هەیڤانە', duration: '١ هەیڤ', badge: '' },
         '90_days': { name: '٣ هەیڤی', duration: '٣ هەیڤ', badge: 'داشکاندن ٪٥٠ 🌟' },
         '1_year': { name: 'سالانە', duration: '١ سالا تەمام', badge: 'VIP بێ سنور 👑' },
       },
@@ -731,7 +731,7 @@ export const TRANSLATIONS = {
       tiers: {
         '1_day': { name: 'تجربة (يوم واحد)', duration: '٢٤ ساعة', badge: 'سريع وتجريبي ⚡' },
         '7_days': { name: 'أسبوعي (٧ أيام)', duration: 'أسبوع واحد', badge: 'اقتصادي 👍' },
-        '30_days': { name: 'شهري (٣٠ يوماً)', duration: 'شهر كامل', badge: 'الأكثر طلباً 🔥' },
+        '30_days': { name: 'شهري (٣٠ يوماً)', duration: 'شهر كامل', badge: '' },
         '90_days': { name: '٣ أشهر (٩٠ يوماً)', duration: '٣ أشهر', badge: 'خصم ٥٠٪ 🌟' },
         '1_year': { name: 'سنوي (سنة كاملة) 👑', duration: 'سنة كاملة', badge: 'VIP بلا حدود 👑' },
       },
@@ -1141,7 +1141,7 @@ export const TRANSLATIONS = {
       tiers: {
         '1_day': { name: 'Trial (1 Day)', duration: '24 Hours', badge: 'Fast Trial ⚡' },
         '7_days': { name: 'Weekly (7 Days)', duration: '1 Week', badge: 'Affordable 👍' },
-        '30_days': { name: 'Monthly (30 Days)', duration: '1 Month', badge: 'Best Seller 🔥' },
+        '30_days': { name: 'Monthly (30 Days)', duration: '1 Month', badge: '' },
         '90_days': { name: '3 Months (90 Days)', duration: '3 Months', badge: '50% OFF 🌟' },
         '1_year': { name: 'Annual (1 Year) 👑', duration: 'Full Year', badge: 'Unlimited VIP 👑' },
       },

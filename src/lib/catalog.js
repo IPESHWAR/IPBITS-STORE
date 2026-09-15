@@ -50,7 +50,6 @@ export const LOCKED_PRODUCTS = [
       ar: 'تفكير، كتابة وترجمة ذكية',
       en: 'Smart reasoning, writing & translation',
     },
-    highlight: 'bestseller',
     priceIQD: 35000,
     priceUSD: 23,
     filterGroup: 'ai',

@@ -5,7 +5,6 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
   CheckCircle2,
-  Clock,
   Send,
   LayoutGrid,
   Bot,
@@ -142,25 +141,9 @@ export default function StorePage() {
   const [notifyLoading, setNotifyLoading] = useState(false);
   const [notifyDone, setNotifyDone] = useState(false);
 
-  // Feature 5 — Countdown Timer
-  const [countdown, setCountdown] = useState({ h: 23, m: 59, s: 59 });
-
   const totalIQD = Number(checkoutItem?.priceIQD || 0);
   const totalUSD = Number(checkoutItem?.priceUSD || 0);
   const checkoutItems = checkoutItem ? [checkoutItem] : [];
-
-  useEffect(() => {
-    const tick = setInterval(() => {
-      setCountdown(prev => {
-        let { h, m, s } = prev;
-        if (s > 0) return { h, m, s: s - 1 };
-        if (m > 0) return { h, m: m - 1, s: 59 };
-        if (h > 0) return { h: h - 1, m: 59, s: 59 };
-        return { h: 23, m: 59, s: 59 };
-      });
-    }, 1000);
-    return () => clearInterval(tick);
-  }, []);
 
   // Live order status: Realtime + polling fallback until key arrives
   useEffect(() => {
@@ -715,22 +698,11 @@ export default function StorePage() {
                 aria-hidden="true"
               />
 
-              {/* Bundle title + compact countdown tag */}
-              <div className="relative mb-6 flex flex-col items-center gap-2.5 text-center">
+              {/* Bundle title */}
+              <div className="relative mb-6 text-center">
                 <h2 className="lm-offer-vip-title text-xl sm:text-3xl font-extrabold tracking-tight leading-snug text-transparent bg-clip-text bg-gradient-to-r from-amber-700 via-amber-600 to-orange-600 dark:from-amber-100 dark:via-amber-300 dark:to-yellow-500 dark:drop-shadow-[0_2px_12px_rgba(245,158,11,0.15)]">
                   {s.specialOfferTitle1} {s.specialOfferTitle2}
                 </h2>
-                <span
-                  className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-700 dark:text-amber-300 text-xs font-medium backdrop-blur-md"
-                  aria-label={`${s.countdownLabel} ${String(countdown.h).padStart(2, '0')}:${String(countdown.m).padStart(2, '0')}:${String(countdown.s).padStart(2, '0')}`}
-                >
-                  <Clock size={13} className="text-amber-500 dark:text-amber-400 animate-pulse shrink-0" aria-hidden="true" />
-                  <span className="font-mono tracking-wider tabular-nums font-semibold">
-                    {String(countdown.h).padStart(2, '0')}:
-                    {String(countdown.m).padStart(2, '0')}:
-                    {String(countdown.s).padStart(2, '0')}
-                  </span>
-                </span>
               </div>
 
               <ul className="relative grid grid-cols-2 gap-x-3 gap-y-2.5 sm:gap-x-6 sm:gap-y-3 max-w-xl mx-auto my-5 text-start">
@@ -798,15 +770,17 @@ export default function StorePage() {
                     </span>
                   </div>
                 </div>
-                <span
-                  className={`text-xs px-3 py-1 rounded-full font-medium shrink-0 ${
-                    selectedTierId === '1_year' || /VIP/i.test(currentTierText.badge)
-                      ? 'bg-amber-50 dark:bg-amber-500/10 border border-amber-300 dark:border-amber-500/30 text-amber-800 dark:text-amber-300'
-                      : 'bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-300 dark:border-emerald-500/30 text-emerald-800 dark:text-emerald-300'
-                  }`}
-                >
-                  {currentTierText.badge}
-                </span>
+                {currentTierText.badge ? (
+                  <span
+                    className={`text-xs px-3 py-1 rounded-full font-medium shrink-0 ${
+                      selectedTierId === '1_year' || /VIP/i.test(currentTierText.badge)
+                        ? 'bg-amber-50 dark:bg-amber-500/10 border border-amber-300 dark:border-amber-500/30 text-amber-800 dark:text-amber-300'
+                        : 'bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-300 dark:border-emerald-500/30 text-emerald-800 dark:text-emerald-300'
+                    }`}
+                  >
+                    {currentTierText.badge}
+                  </span>
+                ) : null}
               </div>
 
               <button
@@ -822,10 +796,12 @@ export default function StorePage() {
             </motion.div>
 
             <div id="catalog" className="scroll-mt-20 space-y-5">
-              <div className="flex items-center justify-between gap-3">
-                <h3 className={`text-sm sm:text-base ${HEADING} tracking-tight`}>
-                  {showFullCatalog ? t.menu.sectionCatalog : t.menu.featuredTitle}
-                </h3>
+              <div className={`flex items-center gap-3 ${showFullCatalog ? 'justify-between' : 'justify-end'}`}>
+                {showFullCatalog ? (
+                  <h3 className={`text-sm sm:text-base ${HEADING} tracking-tight`}>
+                    {t.menu.sectionCatalog}
+                  </h3>
+                ) : null}
                 {!showFullCatalog ? (
                   <button
                     type="button"
@@ -844,7 +820,7 @@ export default function StorePage() {
                     }}
                     className={`text-[11px] ${BODY_SECONDARY} hover:text-zinc-950 dark:hover:text-white cursor-pointer transition-colors`}
                   >
-                    {t.menu.featuredTitle}
+                    {t.menu.viewAll}
                   </button>
                 )}
               </div>
@@ -906,12 +882,9 @@ export default function StorePage() {
                 const badgeLabel =
                   soon
                     ? (s.badgeComingSoon || s.comingSoonBadge || 'ل نێزیک')
-                    : product.highlight === 'bestseller'
-                      ? s.badgeBestSeller
-                      : product.highlight === 'offer' && !promoText
-                        ? s.badgeSpecialOffer
-                        : (!promoText && product.badge) || null;
-                const isBestSeller = !soon && product.highlight === 'bestseller';
+                    : product.highlight === 'offer' && !promoText
+                      ? s.badgeSpecialOffer
+                      : (!promoText && product.badge) || null;
 
                 return (
                 <motion.div
@@ -936,9 +909,7 @@ export default function StorePage() {
                       className={`absolute top-3 end-3 z-10 px-2 py-0.5 text-[11px] font-medium tracking-wide rounded-full backdrop-blur-md ${
                         soon
                           ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
-                          : isBestSeller
-                            ? 'bg-amber-500/10 border border-amber-500/25 text-amber-700 dark:text-amber-400'
-                            : 'bg-emerald-500/10 border border-emerald-500/25 text-emerald-700 dark:text-emerald-400'
+                          : 'bg-emerald-500/10 border border-emerald-500/25 text-emerald-700 dark:text-emerald-400'
                       }`}
                     >
                       {badgeLabel}
@@ -953,7 +924,7 @@ export default function StorePage() {
                       />
                     </div>
                     <h3
-                      className={`lm-product-name ${HEADING} text-sm sm:text-base mb-1 pe-16`}
+                      className={`lm-product-name ${HEADING} text-sm sm:text-base mb-1 ${badgeLabel ? 'pe-16' : ''}`}
                       onClick={(e) => {
                         e.stopPropagation();
                         if (!soon) startProductPurchase(product);
@@ -1159,11 +1130,6 @@ export default function StorePage() {
                       <span className="text-[11px] sm:text-xs text-zinc-400 dark:text-zinc-400 tracking-wide leading-snug">
                         {getProductSubtitle(quickViewProduct, lang)}
                       </span>
-                      {quickViewProduct.highlight === 'bestseller' && (
-                        <span className="px-2.5 py-0.5 text-[11px] font-medium tracking-wide rounded-full bg-amber-500/10 border border-amber-500/25 text-amber-400 backdrop-blur-md">
-                          {s.badgeBestSeller}
-                        </span>
-                      )}
                     </div>
                   </div>
                 </div>
