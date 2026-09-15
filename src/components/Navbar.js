@@ -23,6 +23,17 @@ import { useTheme } from '@/components/ThemeProvider';
 
 const DRAWER_MS = 200;
 
+/** Legacy hashes → current section ids */
+const SECTION_ALIASES = {
+  'special-offer': 'pricing',
+  catalog: 'store',
+};
+
+function resolveSectionId(id) {
+  const key = String(id || '').replace(/^#/, '');
+  return SECTION_ALIASES[key] || key;
+}
+
 const MENU_COPY = {
   ku: {
     menu: 'مێنیو',
@@ -108,6 +119,8 @@ export default function Navbar({ onOpenCatalog }) {
   const [portalReady, setPortalReady] = useState(false);
   const menuPanelRef = useRef(null);
   const closeTimerRef = useRef(null);
+  const pendingNavRef = useRef(null);
+  const lockedScrollYRef = useRef(0);
 
   const menuLang = lang === 'ar' || lang === 'en' ? lang : 'ku';
   const m = MENU_COPY[menuLang];
@@ -156,6 +169,7 @@ export default function Navbar({ onOpenCatalog }) {
       if (e.key === 'Escape') closeMenu();
     };
     const scrollY = window.scrollY || window.pageYOffset || 0;
+    lockedScrollYRef.current = scrollY;
     document.addEventListener('keydown', onKey);
     document.body.classList.add('drawer-open');
     document.documentElement.style.overflow = 'hidden';
@@ -173,12 +187,19 @@ export default function Navbar({ onOpenCatalog }) {
       document.body.style.top = '';
       document.body.style.width = '';
       document.body.style.height = '';
-      window.scrollTo(0, scrollY);
+      window.scrollTo(0, lockedScrollYRef.current);
+
+      const pendingNav = pendingNavRef.current;
+      pendingNavRef.current = null;
+      if (typeof pendingNav === 'function') {
+        // After unlocking position:fixed, wait a tick so smooth scroll lands correctly
+        window.setTimeout(() => pendingNav(), 50);
+      }
     };
   }, [drawerMounted]);
 
   const scrollToId = (id) => {
-    const el = document.getElementById(id);
+    const el = document.getElementById(resolveSectionId(id));
     if (el) {
       el.scrollIntoView({ behavior: 'smooth', block: 'start' });
       return true;
@@ -186,27 +207,49 @@ export default function Navbar({ onOpenCatalog }) {
     return false;
   };
 
-  const goToSection = (id) => {
-    closeMenu();
-    if (id === 'catalog' && typeof onOpenCatalog === 'function' && isHome) {
+  const runSectionNav = (id) => {
+    const targetId = resolveSectionId(id);
+    if (targetId === 'store' && typeof onOpenCatalog === 'function' && isHome) {
       onOpenCatalog();
       return;
     }
-    if (isHome && scrollToId(id)) return;
-    router.push(`/#${id}`);
+    if (isHome && scrollToId(targetId)) {
+      try {
+        window.history.replaceState(null, '', `/#${targetId}`);
+      } catch {
+        /* ignore */
+      }
+      return;
+    }
+    router.push(`/#${targetId}`);
+  };
+
+  const goToSection = (id) => {
+    const targetId = resolveSectionId(id);
+    if (drawerMounted || menuOpen) {
+      pendingNavRef.current = () => runSectionNav(targetId);
+      closeMenu();
+      return;
+    }
+    runSectionNav(targetId);
+  };
+
+  const handleSectionClick = (e, id) => {
+    e.preventDefault();
+    goToSection(id);
   };
 
   const handleAllProducts = (e) => {
     e.preventDefault();
-    goToSection('catalog');
+    goToSection('store');
   };
 
   const closedTranslate = isRtl ? '-translate-x-full' : 'translate-x-full';
   const panelSide = isRtl ? 'left-0 border-r' : 'right-0 border-l';
 
   const centerLinks = [
-    { id: 'catalog', label: m.navProducts },
-    { id: 'special-offer', label: m.navOffer },
+    { id: 'store', label: m.navProducts },
+    { id: 'pricing', label: m.navOffer },
     { href: '/chat', label: m.aiHub },
     { id: 'faq', label: m.navFaq },
   ];
@@ -306,25 +349,25 @@ export default function Navbar({ onOpenCatalog }) {
 
             {/* Nav Links */}
             <nav className="flex flex-col gap-1 pt-1" aria-label={m.menu}>
-              <button type="button" onClick={() => goToSection('special-offer')} className={`${NAV_ROW} text-start`}>
+              <a href="/#pricing" onClick={(e) => handleSectionClick(e, 'pricing')} className={`${NAV_ROW} text-start`}>
                 <span>{m.navOffer}</span>
                 <ChevronLeft className={`w-4 h-4 text-zinc-400 shrink-0 ${isRtl ? '' : 'rotate-180'}`} />
-              </button>
+              </a>
 
-              <button type="button" onClick={handleAllProducts} className={`${NAV_ROW} text-start`}>
+              <a href="/#store" onClick={handleAllProducts} className={`${NAV_ROW} text-start`}>
                 <span>{m.allProducts}</span>
                 <ChevronLeft className={`w-4 h-4 text-zinc-400 shrink-0 ${isRtl ? '' : 'rotate-180'}`} />
-              </button>
+              </a>
 
               <Link href="/chat" onClick={closeMenu} className={NAV_ROW}>
                 <span>{m.aiHub}</span>
                 <ChevronLeft className={`w-4 h-4 text-zinc-400 shrink-0 ${isRtl ? '' : 'rotate-180'}`} />
               </Link>
 
-              <button type="button" onClick={() => goToSection('faq')} className={`${NAV_ROW} text-start`}>
+              <a href="/#faq" onClick={(e) => handleSectionClick(e, 'faq')} className={`${NAV_ROW} text-start`}>
                 <span>{m.navFaq}</span>
                 <ChevronLeft className={`w-4 h-4 text-zinc-400 shrink-0 ${isRtl ? '' : 'rotate-180'}`} />
-              </button>
+              </a>
             </nav>
           </div>
 
@@ -376,14 +419,14 @@ export default function Navbar({ onOpenCatalog }) {
                     {link.label}
                   </Link>
                 ) : (
-                  <button
+                  <a
                     key={link.id}
-                    type="button"
-                    onClick={() => goToSection(link.id)}
+                    href={`/#${link.id}`}
+                    onClick={(e) => handleSectionClick(e, link.id)}
                     className={CENTER_LINK}
                   >
                     {link.label}
-                  </button>
+                  </a>
                 )
               )}
             </div>

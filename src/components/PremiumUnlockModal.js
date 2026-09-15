@@ -47,7 +47,7 @@ export default function PremiumUnlockModal({
         <p className="text-xs text-slate-300 leading-6 mb-4">{c.unlockBody}</p>
         <div className="grid grid-cols-2 gap-2 mb-4">
           <Link
-            href="/#special-offer"
+            href="/#pricing"
             onClick={onClose}
             className="rounded-xl bg-teal-600 hover:bg-teal-500 text-white text-xs font-black py-2.5 text-center"
           >

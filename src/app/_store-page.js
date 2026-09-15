@@ -291,9 +291,22 @@ export default function StorePage() {
   const openFullCatalog = () => {
     setShowFullCatalog(true);
     setTimeout(() => {
-      document.getElementById('catalog')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      document.getElementById('store')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }, 50);
   };
+
+  // Deep-link hashes: /#pricing, /#store, /#faq, /#contact, /#features (+ legacy aliases)
+  useEffect(() => {
+    const raw = String(window.location.hash || '').replace(/^#/, '');
+    if (!raw) return undefined;
+    const aliases = { 'special-offer': 'pricing', catalog: 'store' };
+    const id = aliases[raw] || raw;
+    if (id === 'store') setShowFullCatalog(true);
+    const timer = window.setTimeout(() => {
+      document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 120);
+    return () => window.clearTimeout(timer);
+  }, []);
 
   const beginCheckout = (item) => {
     if (!item) return;
@@ -690,7 +703,7 @@ export default function StorePage() {
               whileInView={mounted ? { opacity: 1, y: 0 } : undefined}
               viewport={{ once: true, margin: '-60px' }}
               transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
-              id="special-offer"
+              id="pricing"
               className={`relative ${OFFER_SURFACE} scroll-mt-20`}
             >
               <div
@@ -705,7 +718,7 @@ export default function StorePage() {
                 </h2>
               </div>
 
-              <ul className="relative grid grid-cols-2 gap-x-3 gap-y-2.5 sm:gap-x-6 sm:gap-y-3 max-w-xl mx-auto my-5 text-start">
+              <ul id="features" className="relative grid grid-cols-2 gap-x-3 gap-y-2.5 sm:gap-x-6 sm:gap-y-3 max-w-xl mx-auto my-5 text-start scroll-mt-20">
                 {featureChecklist.map((feature, idx) => (
                   <li key={idx} className="lm-offer-feature flex items-center gap-1.5 sm:gap-2 justify-start">
                     <CheckCircle2 className="lm-offer-check w-3.5 h-3.5 sm:w-4 sm:h-4 text-emerald-500 dark:text-emerald-400 shrink-0" />
@@ -795,7 +808,7 @@ export default function StorePage() {
               </button>
             </motion.div>
 
-            <div id="catalog" className="scroll-mt-20 space-y-5">
+            <div id="store" className="scroll-mt-20 space-y-5">
               <div className={`flex items-center gap-3 ${showFullCatalog ? 'justify-between' : 'justify-end'}`}>
                 {showFullCatalog ? (
                   <h3 className={`text-sm sm:text-base ${HEADING} tracking-tight`}>

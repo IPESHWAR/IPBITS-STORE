@@ -664,6 +664,7 @@ button:focus-visible {
 }
 
 /* VIP offer card — crisp glass */
+.light-mode #pricing,
 .light-mode #special-offer {
   background-color: rgba(255, 255, 255, 0.9) !important;
   border-color: rgba(226, 232, 240, 0.9) !important;
@@ -736,18 +737,24 @@ button:focus-visible {
   color: #020617 !important; /* slate-950 */
 }
 
+.light-mode #pricing .bg-slate-950\/70,
+.light-mode #pricing .bg-white\/\[0\.02\],
 .light-mode #special-offer .bg-slate-950\/70,
 .light-mode #special-offer .bg-white\/\[0\.02\] {
   background-color: #ffffff !important;
   border-color: rgba(226, 232, 240, 0.9) !important;
 }
 
+.light-mode #pricing .text-emerald-300,
+.light-mode #pricing .text-cyan-300\/90,
 .light-mode #special-offer .text-emerald-300,
 .light-mode #special-offer .text-cyan-300\/90 {
   color: #0f172a !important;
 }
 
 /* VIP offer title — royal amber (not emerald) */
+.light-mode #pricing .lm-offer-vip-title,
+.light-mode #pricing .lm-offer-vip-title.text-transparent.bg-clip-text,
 .light-mode #special-offer .lm-offer-vip-title,
 .light-mode #special-offer .lm-offer-vip-title.text-transparent.bg-clip-text {
   background-image: linear-gradient(90deg, #b45309, #d97706, #ea580c) !important;

@@ -38,7 +38,7 @@ export default function RootLayout({ children }) {
       lang="ku"
       dir="rtl"
       suppressHydrationWarning
-      className={`${vazirmatn.variable} ${vazirmatn.className} ${geistMono.variable} dark h-full antialiased bg-[#090A0F] text-white`}
+      className={`${vazirmatn.variable} ${vazirmatn.className} ${geistMono.variable} dark h-full scroll-smooth antialiased bg-[#090A0F] text-white`}
     >
       <body
         suppressHydrationWarning

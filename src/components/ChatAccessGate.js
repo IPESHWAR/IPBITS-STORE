@@ -143,7 +143,7 @@ export default function ChatAccessGate({ onUnlocked, initialKey = '' }) {
 
         <p className="mt-5 text-center text-xs text-white/40">
           <Link
-            href="/#special-offer"
+            href="/#pricing"
             className="font-medium text-sky-300/85 hover:text-sky-200 underline underline-offset-4 transition-colors"
           >
             {g.gateBuyLink}

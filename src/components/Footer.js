@@ -35,7 +35,7 @@ export default function Footer() {
   ];
 
   return (
-    <footer className="relative w-full border-t border-white/10 bg-[#090A0F] mt-4 transition-colors duration-200">
+    <footer id="contact" className="relative w-full border-t border-white/10 bg-[#090A0F] mt-4 scroll-mt-20 transition-colors duration-200">
       <div className="relative max-w-6xl mx-auto px-4 sm:px-6 pt-12 pb-8">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-10 mb-10">
           <div className="sm:col-span-2 lg:col-span-1">
