@@ -8,13 +8,16 @@ import {
   Loader2,
   Image as ImageIcon,
   X,
-  Paperclip,
+  Plus,
+  Camera,
+  FileText,
+  FolderHeart,
   Check,
   Copy,
   Download,
   Code2,
-  FileText,
 } from 'lucide-react';
+import { createPortal } from 'react-dom';
 import ChatHeader from '@/components/ChatHeader';
 import FreeModelPicker from '@/components/FreeModelPicker';
 import ChatAccessGate from '@/components/ChatAccessGate';
@@ -297,12 +300,15 @@ export default function ChatPage() {
   const [gateKeyHint, setGateKeyHint] = useState('');
   const [redeemOpen, setRedeemOpen] = useState(false);
   const [toast, setToast] = useState('');
+  const [attachSheetOpen, setAttachSheetOpen] = useState(false);
+  const [portalReady, setPortalReady] = useState(false);
 
   const chatEndRef = useRef(null);
   const messagesRef = useRef(null);
   const shellRef = useRef(null);
   const fileInputRef = useRef(null);
   const codeFileInputRef = useRef(null);
+  const cameraInputRef = useRef(null);
   const toastTimer = useRef(null);
 
   const credits = useMemo(() => getAccessCredits(license), [license]);
@@ -321,6 +327,19 @@ export default function ChatPage() {
       if (toastTimer.current) window.clearTimeout(toastTimer.current);
     };
   }, []);
+
+  useEffect(() => {
+    setPortalReady(true);
+  }, []);
+
+  useEffect(() => {
+    if (!attachSheetOpen) return undefined;
+    const onKey = (e) => {
+      if (e.key === 'Escape') setAttachSheetOpen(false);
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [attachSheetOpen]);
 
   // Lock document scroll on /chat so only the messages list can move
   useEffect(() => {
@@ -511,6 +530,7 @@ export default function ChatPage() {
   const handleImageChange = async (e) => {
     const file = e.target.files?.[0];
     e.target.value = '';
+    setAttachSheetOpen(false);
     if (!file) return;
     try {
       const dataUrl = await readFileAsDataUrl(file);
@@ -530,6 +550,7 @@ export default function ChatPage() {
   const handleCodeFileUpload = async (e) => {
     const file = e.target.files?.[0];
     e.target.value = '';
+    setAttachSheetOpen(false);
     if (!file) return;
 
     try {
@@ -573,6 +594,23 @@ export default function ChatPage() {
     setAttachment(null);
     if (fileInputRef.current) fileInputRef.current.value = '';
     if (codeFileInputRef.current) codeFileInputRef.current.value = '';
+    if (cameraInputRef.current) cameraInputRef.current.value = '';
+  };
+
+  const openAttachSheet = () => {
+    if (!accessUnlocked) {
+      openRedeem();
+      return;
+    }
+    setAttachSheetOpen(true);
+  };
+
+  const closeAttachSheet = () => setAttachSheetOpen(false);
+
+  const triggerPicker = (ref) => {
+    closeAttachSheet();
+    // Allow sheet close animation to settle before native picker opens
+    window.setTimeout(() => ref.current?.click(), 180);
   };
 
   const handleSend = async (e) => {
@@ -869,54 +907,44 @@ export default function ChatPage() {
           removeLabel={c.removeAttachment || 'Remove'}
         />
 
+        <input
+          type="file"
+          accept="image/*"
+          capture="environment"
+          ref={cameraInputRef}
+          onChange={handleImageChange}
+          className="hidden"
+          disabled={!accessUnlocked}
+        />
+        <input
+          type="file"
+          accept="image/*"
+          ref={fileInputRef}
+          onChange={handleImageChange}
+          className="hidden"
+          disabled={!accessUnlocked}
+        />
+        <input
+          type="file"
+          accept="*/*"
+          ref={codeFileInputRef}
+          onChange={handleCodeFileUpload}
+          className="hidden"
+          disabled={!accessUnlocked}
+        />
+
         <form
           onSubmit={handleSend}
           className="max-w-3xl mx-auto flex items-center gap-2 bg-[#10131c]/80 border border-white/10 focus-within:border-white/25 rounded-2xl backdrop-blur-xl shadow-2xl px-2 py-1.5 sm:px-2.5 sm:py-2 transition-colors"
         >
-          <input
-            type="file"
-            accept=".js,.jsx,.ts,.tsx,.py,.html,.css,.json,.txt,.sql,.md,.env,.php,.cpp,.c,.java,.pdf,.docx,.doc,.csv,.xml,.yml,.yaml,.log,.rtf,image/*"
-            ref={codeFileInputRef}
-            onChange={handleCodeFileUpload}
-            className="hidden"
-            disabled={!accessUnlocked}
-          />
           <button
             type="button"
-            onClick={() => {
-              if (!accessUnlocked) {
-                openRedeem();
-                return;
-              }
-              codeFileInputRef.current?.click();
-            }}
-            className="text-white/45 hover:text-white/80 hover:bg-white/[0.06] p-2.5 rounded-xl transition-all shrink-0 cursor-pointer"
-            title={c.uploadFileTitle}
+            onClick={openAttachSheet}
+            aria-label={c.attachMenuTitle || c.uploadFileTitle || 'Attach'}
+            title={c.attachMenuTitle || c.uploadFileTitle}
+            className="rounded-full p-2 bg-white/5 hover:bg-white/10 active:scale-95 transition-all text-neutral-300 hover:text-white border border-white/10 shrink-0 cursor-pointer"
           >
-            <Paperclip size={16} />
-          </button>
-
-          <input
-            type="file"
-            accept="image/*"
-            ref={fileInputRef}
-            onChange={handleImageChange}
-            className="hidden"
-            disabled={!accessUnlocked}
-          />
-          <button
-            type="button"
-            onClick={() => {
-              if (!accessUnlocked) {
-                openRedeem();
-                return;
-              }
-              fileInputRef.current?.click();
-            }}
-            className="text-white/45 hover:text-white/80 hover:bg-white/[0.06] p-2.5 rounded-xl transition-all shrink-0 cursor-pointer"
-            title={c.uploadImageTitle}
-          >
-            <ImageIcon size={16} />
+            <Plus size={18} strokeWidth={2} />
           </button>
 
           <input
@@ -947,6 +975,83 @@ export default function ChatPage() {
           </button>
         </form>
       </footer>
+
+      {portalReady &&
+        attachSheetOpen &&
+        createPortal(
+          <div className="fixed inset-0 z-[120] flex flex-col justify-end" role="presentation">
+            <button
+              type="button"
+              aria-label={c.closeAttachSheet || 'Close'}
+              className="absolute inset-0 bg-black/60 backdrop-blur-md cursor-pointer border-0"
+              onClick={closeAttachSheet}
+            />
+            <div
+              role="dialog"
+              aria-modal="true"
+              aria-label={c.attachMenuTitle || 'Attachments'}
+              className="relative z-10 w-full max-w-lg mx-auto bg-[#121216]/95 border-t border-white/10 p-5 rounded-t-2xl shadow-2xl pb-[max(1.25rem,env(safe-area-inset-bottom))] animate-[chatSheetUp_0.28s_cubic-bezier(0.22,1,0.36,1)]"
+            >
+              <div className="w-10 h-1 bg-white/20 rounded-full mx-auto mb-4" aria-hidden="true" />
+
+              <div className="grid grid-cols-3 gap-3 mb-4">
+                <button
+                  type="button"
+                  onClick={() => triggerPicker(cameraInputRef)}
+                  className="flex flex-col items-center justify-center p-4 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] active:scale-95 border border-white/5 transition-all cursor-pointer gap-2"
+                >
+                  <Camera size={22} className="text-sky-300" strokeWidth={1.75} />
+                  <span className="text-[11px] sm:text-xs font-medium text-white/80">
+                    {c.attachCamera || 'Camera'}
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => triggerPicker(fileInputRef)}
+                  className="flex flex-col items-center justify-center p-4 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] active:scale-95 border border-white/5 transition-all cursor-pointer gap-2"
+                >
+                  <ImageIcon size={22} className="text-emerald-300" strokeWidth={1.75} />
+                  <span className="text-[11px] sm:text-xs font-medium text-white/80">
+                    {c.attachPhotos || 'Photos'}
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => triggerPicker(codeFileInputRef)}
+                  className="flex flex-col items-center justify-center p-4 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] active:scale-95 border border-white/5 transition-all cursor-pointer gap-2"
+                >
+                  <FileText size={22} className="text-violet-300" strokeWidth={1.75} />
+                  <span className="text-[11px] sm:text-xs font-medium text-white/80">
+                    {c.attachFiles || 'Files'}
+                  </span>
+                </button>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  closeAttachSheet();
+                  showToast(c.attachAiDriveSoon || c.attachAiDrive || 'AI Drive');
+                }}
+                className="w-full flex items-center gap-3 px-3.5 py-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/[0.06] transition-all active:scale-[0.99] cursor-pointer text-start"
+              >
+                <span className="h-9 w-9 rounded-full bg-white/[0.05] border border-white/10 inline-flex items-center justify-center shrink-0">
+                  <FolderHeart size={16} className="text-amber-300/90" strokeWidth={1.75} />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-xs font-medium text-white/85">
+                    {c.attachAiDrive || 'From AI Drive'}
+                  </span>
+                  <span className="block text-[10px] text-white/40 mt-0.5 truncate">
+                    {c.attachAiDriveHint || ''}
+                  </span>
+                </span>
+                <Sparkles size={14} className="text-white/30 shrink-0" />
+              </button>
+            </div>
+          </div>,
+          document.body
+        )}
     </div>
   );
 }
