@@ -5,6 +5,7 @@ import {
   getBotToken,
   isAuthorizedAdminChat,
   getAdminChatId,
+  toWhatsAppDigits,
 } from '@/lib/telegramApprove';
 import { normalizePhone } from '@/lib/orderValidation';
 
@@ -95,7 +96,6 @@ function getSupabase() {
   return createClient(supabaseUrl, supabaseKey);
 }
 
-/** Same as scripts/generate-bulk-keys.mjs createOpenRouterKey */
 async function createOpenRouterKey(name, limit) {
   const openrouterAdminKey = process.env.OPENROUTER_MANAGEMENT_API_KEY;
   if (!openrouterAdminKey) {
@@ -119,10 +119,6 @@ async function createOpenRouterKey(name, limit) {
   return key;
 }
 
-/**
- * Exact generation loop from scripts/generate-bulk-keys.mjs:
- * IPBITS-{PREFIX}-{1000-9999} → OpenRouter key → vouchers insert
- */
 async function generateKeysLikeScript(tier, count) {
   const supabase = getSupabase();
   if (!supabase) {
@@ -204,21 +200,6 @@ function formatSuccessMessage(codes, tier) {
   );
 }
 
-function toWhatsAppDigits(phone) {
-  const digits = normalizePhone(phone).replace(/^\+/, '');
-  if (/^07[3-9]\d{8}$/.test(digits)) return `964${digits.slice(1)}`;
-  return digits.replace(/\D/g, '');
-}
-
-function buildCustomerWaMessage(code, tier) {
-  return (
-    `سڵاو! داخوازییا تە هاتە پەسەندکرن ژ IPBITS STORE.\n\n` +
-    `🔑 کلیلێ چالاککرنێ:\n${code}\n\n` +
-    `📦 ${tier.labelEn} (${tier.durationEn})\n` +
-    `تکایە ڤێ کلیلێ د AI Hub دا بکاربینە.`
-  );
-}
-
 function isAuthorizedChatId(chatId) {
   return (
     String(chatId) === HARDCODED_AUTHORIZED_CHAT_ID ||
@@ -227,113 +208,84 @@ function isAuthorizedChatId(chatId) {
   );
 }
 
-/**
- * 1-click Confirm Order: generate voucher, mark order completed, WhatsApp deep link.
- * callback_data: approve_order:<orderId_or_phone>:<tier>
- */
-async function handleApproveOrderCallback(cq) {
-  const data = String(cq.data || '');
+function assertCallbackAuthorized(cq) {
   const chat = cq.message?.chat || {};
   const chatId = chat.id;
+  return isAuthorizedChatId(chatId) || isAuthorizedAdminChat(chat, getAdminChatId());
+}
+
+function buildAiWaText(key) {
+  return (
+    `سڵاو بەڕێزم، فەرموو کلیلی ئەکتیڤکردن بۆ AI Hub:\n` +
+    `${key}\n` +
+    `سوپاس بۆ کڕینەکەت!`
+  );
+}
+
+function buildAccWaText(productName) {
+  return (
+    `سڵاو بەڕێزم، پەیوەست بە داخوازییا تە یا ${productName}:\n` +
+    `ئەکاونتێ تە یێ ئامادەیە...`
+  );
+}
+
+async function markOrderCompleted(phone, code) {
+  const supabase = getSupabase();
+  if (!supabase || !phone) return;
+
+  const variants = [
+    normalizePhone(phone),
+    toWhatsAppDigits(phone),
+    String(phone).replace(/^964/, '0'),
+  ].filter(Boolean);
+
+  for (const p of [...new Set(variants)]) {
+    await supabase
+      .from('orders')
+      .update({
+        status: 'completed',
+        license_key: code || null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('customer_phone', p)
+      .eq('status', 'pending');
+  }
+}
+
+/** confirm_ai:phone:tier — generate voucher + WhatsApp key link */
+async function handleConfirmAi(cq) {
+  const data = String(cq.data || '');
+  const chatId = cq.message?.chat?.id;
   const messageId = cq.message?.message_id;
   const hasPhoto = !!(cq.message?.photo && cq.message.photo.length);
   const originalText = cq.message?.caption || cq.message?.text || '';
 
-  if (!isAuthorizedChatId(chatId) && !isAuthorizedAdminChat(chat, getAdminChatId())) {
-    await answerCallbackQuery(cq.id, '❌ Unauthorized', true);
+  await answerCallbackQuery(cq.id, 'دروستکرنا کلیلێ…', false);
+
+  if (!assertCallbackAuthorized(cq)) {
+    await sendTelegramMessage(chatId, '❌ Unauthorized');
     return;
   }
 
   const parts = data.split(':');
-  // approve_order : ref : tier
-  const ref = String(parts[1] || '').trim();
+  const phoneRaw = String(parts[1] || '').trim();
   const tierRaw = String(parts[2] || 'daily').trim();
+  const phone = toWhatsAppDigits(phoneRaw);
   const tier = resolveTier(tierRaw) || resolveTier('daily');
-
-  if (!ref) {
-    await answerCallbackQuery(cq.id, '❌ Missing order ref', true);
-    return;
-  }
-
-  const supabase = getSupabase();
-  let order = null;
-  if (supabase) {
-    const byId = await supabase.from('orders').select('*').eq('id', ref).maybeSingle();
-    if (byId.data) {
-      order = byId.data;
-    } else {
-      const phoneGuess = normalizePhone(ref);
-      const byPhone = await supabase
-        .from('orders')
-        .select('*')
-        .eq('customer_phone', phoneGuess)
-        .eq('status', 'pending')
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      order = byPhone.data || null;
-    }
-  }
-
-  if (order && (order.status === 'completed' || order.status === 'sent' || order.status === 'approved') && order.license_key) {
-    const phone = order.customer_phone || ref;
-    const waDigits = toWhatsAppDigits(phone);
-    const waText = buildCustomerWaMessage(order.license_key, tier);
-    const waUrl = waDigits
-      ? `https://wa.me/${waDigits}?text=${encodeURIComponent(waText)}`
-      : '';
-    await answerCallbackQuery(cq.id, 'ئۆردەر بەری نھا هاتە پەسەندکرن ✅', true);
-    await editTelegramMessage({
-      chatId,
-      messageId,
-      isCaption: hasPhoto,
-      text:
-        `✅ داخوازی هاتە پەسەندکرن!\n` +
-        `کلیل: <code>${order.license_key}</code>\n` +
-        (waUrl
-          ? `<a href="${waUrl}">📲 کلیک ل ڤێرە بکە بۆ هنارتنا کلیلێ ب واتساپێ</a>`
-          : ''),
-      replyMarkup: waUrl
-        ? { inline_keyboard: [[{ text: '📲 هنارتنا کلیلێ ب واتساپێ', url: waUrl }]] }
-        : { inline_keyboard: [] },
-    });
-    return;
-  }
 
   try {
     const codes = await generateKeysLikeScript(tier, 1);
     const code = codes[0];
     if (!code) throw new Error('generation_failed');
 
-    const phone = order?.customer_phone || (/^\d+$/.test(ref) ? ref : '');
-    const waDigits = toWhatsAppDigits(phone);
-    const waText = buildCustomerWaMessage(code, tier);
-    const waUrl = waDigits
-      ? `https://wa.me/${waDigits}?text=${encodeURIComponent(waText)}`
+    await markOrderCompleted(phone || phoneRaw, code);
+
+    const waText = buildAiWaText(code);
+    const waUrl = phone
+      ? `https://wa.me/${phone}?text=${encodeURIComponent(waText)}`
       : '';
 
-    if (supabase && order?.id) {
-      await supabase
-        .from('orders')
-        .update({
-          status: 'completed',
-          license_key: code,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', order.id);
-    } else if (supabase && phone) {
-      await supabase
-        .from('orders')
-        .update({
-          status: 'completed',
-          license_key: code,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('customer_phone', normalizePhone(phone))
-        .eq('status', 'pending');
-    }
-
-    const approvedBody =
+    const body =
       `✅ داخوازی هاتە پەسەندکرن!\n` +
       `کلیل: <code>${code}</code>\n` +
       `(Tier: ${tier.labelEn} | ${tier.durationEn})\n` +
@@ -342,24 +294,104 @@ async function handleApproveOrderCallback(cq) {
         : '⚠️ ژمارا واتساپی نەهاتە دیتن');
 
     const replyMarkup = waUrl
-      ? {
-          inline_keyboard: [[{ text: '📲 هنارتنا کلیلێ ب واتساپێ', url: waUrl }]],
-        }
+      ? { inline_keyboard: [[{ text: '📲 هنارتنا کلیلێ ب واتساپێ', url: waUrl }]] }
       : { inline_keyboard: [] };
 
     await editTelegramMessage({
       chatId,
       messageId,
       isCaption: hasPhoto,
-      text: `${originalText ? `${originalText}\n\n━━━━━━━━━━━━━━━━━━━\n` : ''}${approvedBody}`,
+      text: `${originalText ? `${originalText}\n\n━━━━━━━━━━━━━━━━━━━\n` : ''}${body}`,
       replyMarkup,
     });
 
-    await answerCallbackQuery(cq.id, '✅ هاتە پەسەندکرن', false);
+    await sendTelegramMessage(chatId, body, 'HTML', replyMarkup);
   } catch (err) {
-    console.error('[telegram-webhook] approve_order failed:', err);
-    await answerCallbackQuery(cq.id, `❌ ${err?.message || 'Failed'}`, true);
+    console.error('[telegram-webhook] confirm_ai failed:', err);
+    await sendTelegramMessage(chatId, `❌ خەلەتی: ${err?.message || err}`);
   }
+}
+
+/** confirm_acc:phone:encodedProduct — WhatsApp handoff for account services */
+async function handleConfirmAcc(cq) {
+  const data = String(cq.data || '');
+  const chatId = cq.message?.chat?.id;
+  const messageId = cq.message?.message_id;
+  const hasPhoto = !!(cq.message?.photo && cq.message.photo.length);
+  const originalText = cq.message?.caption || cq.message?.text || '';
+
+  await answerCallbackQuery(cq.id, 'ئامادەکرنا واتساپێ…', false);
+
+  if (!assertCallbackAuthorized(cq)) {
+    await sendTelegramMessage(chatId, '❌ Unauthorized');
+    return;
+  }
+
+  const parts = data.split(':');
+  const phoneRaw = String(parts[1] || '').trim();
+  const encodedProduct = parts.slice(2).join(':');
+  let productName = 'Subscription';
+  try {
+    productName = decodeURIComponent(encodedProduct || 'Subscription') || 'Subscription';
+  } catch {
+    productName = encodedProduct || 'Subscription';
+  }
+
+  const phone = toWhatsAppDigits(phoneRaw);
+  const waText = buildAccWaText(productName);
+  const waUrl = phone
+    ? `https://wa.me/${phone}?text=${encodeURIComponent(waText)}`
+    : '';
+
+  await markOrderCompleted(phone || phoneRaw, null);
+
+  const body =
+    `✅ Account Service — ئامادەیە بۆ ناردن\n` +
+    `📦 ${productName}\n` +
+    `📞 ${phone || phoneRaw || '—'}\n` +
+    (waUrl
+      ? `<a href="${waUrl}">📲 کلیک ل ڤێرە بکە بۆ دانوستاندن و ناردنی ئەکاونت بۆ کڕیار</a>`
+      : '⚠️ ژمارا واتساپی نەهاتە دیتن');
+
+  const replyMarkup = waUrl
+    ? {
+        inline_keyboard: [
+          [{ text: '📲 کلیک ل ڤێرە بکە بۆ دانوستاندن و ناردنی ئەکاونت بۆ کڕیار', url: waUrl }],
+        ],
+      }
+    : { inline_keyboard: [] };
+
+  await editTelegramMessage({
+    chatId,
+    messageId,
+    isCaption: hasPhoto,
+    text: `${originalText ? `${originalText}\n\n━━━━━━━━━━━━━━━━━━━\n` : ''}${body}`,
+    replyMarkup,
+  });
+
+  await sendTelegramMessage(chatId, body, 'HTML', replyMarkup);
+}
+
+/** Legacy approve_order:<ref>:<tier> → confirm_ai */
+async function handleApproveOrderCallback(cq) {
+  const data = String(cq.data || '');
+  const parts = data.split(':');
+  const ref = String(parts[1] || '').trim();
+  const tierRaw = String(parts[2] || 'daily').trim();
+
+  const supabase = getSupabase();
+  let phone = /^\d+$/.test(ref) ? ref : '';
+  if (!phone && supabase) {
+    const { data: order } = await supabase
+      .from('orders')
+      .select('customer_phone')
+      .eq('id', ref)
+      .maybeSingle();
+    phone = order?.customer_phone || '';
+  }
+
+  cq.data = `confirm_ai:${toWhatsAppDigits(phone || ref)}:${tierRaw}`;
+  await handleConfirmAi(cq);
 }
 
 async function handleAuthorizedText(message) {
@@ -392,26 +424,28 @@ async function handleAuthorizedText(message) {
   );
 }
 
-/**
- * Telegram webhook — /gen keys + 1-click order Confirm.
- * Top-up / legacy callbacks are forwarded to /api/telegram/webhook.
- */
 export async function POST(req) {
   try {
     const body = await req.json().catch(() => null);
     if (!body) return okResponse();
 
-    // ── callback_query (Confirm Order button) ──
     if (body.callback_query) {
       const cq = body.callback_query;
       const data = String(cq.data || '');
 
+      if (data.startsWith('confirm_ai:')) {
+        await handleConfirmAi(cq);
+        return okResponse();
+      }
+      if (data.startsWith('confirm_acc:')) {
+        await handleConfirmAcc(cq);
+        return okResponse();
+      }
       if (data.startsWith('approve_order:')) {
         await handleApproveOrderCallback(cq);
         return okResponse();
       }
 
-      // Preserve existing top-up / reject / legacy order handlers
       try {
         const { POST: handleApprovalWebhook } = await import(
           '@/app/api/telegram/webhook/route'
@@ -435,8 +469,7 @@ export async function POST(req) {
     }
 
     const chatId = message.chat.id;
-    const botToken = process.env.TELEGRAM_BOT_TOKEN;
-    if (!botToken) {
+    if (!process.env.TELEGRAM_BOT_TOKEN) {
       console.error('[telegram-webhook] TELEGRAM_BOT_TOKEN missing');
       return okResponse();
     }
@@ -459,7 +492,7 @@ export async function GET() {
     JSON.stringify({
       ok: true,
       endpoint: '/api/telegram-webhook',
-      features: ['/gen', 'approve_order callback'],
+      features: ['/gen', 'confirm_ai', 'confirm_acc', 'approve_order'],
     }),
     { status: 200, headers: { 'Content-Type': 'application/json' } }
   );

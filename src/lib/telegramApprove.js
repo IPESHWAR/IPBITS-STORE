@@ -20,35 +20,137 @@ export function buildApproveKeyboard({ orderId }) {
   };
 }
 
-/**
- * Checkout order notification keyboard:
- * 1-click Confirm (+ optional WhatsApp contact URL).
- * callback_data: approve_order:<orderId_or_phone>:<tier>
- */
-export function buildConfirmOrderKeyboard({ orderId, phone, tier = 'daily', waUrl }) {
-  const ref = String(orderId || phone || '')
-    .replace(/\s+/g, '')
-    .slice(0, 40);
-  const tierKey = String(tier || 'daily')
-    .trim()
-    .toLowerCase()
-    .slice(0, 12);
-  const callbackData = `approve_order:${ref}:${tierKey}`.slice(0, 64);
+/** Normalize to international digits (964…) for callback + wa.me */
+export function toWhatsAppDigits(phone) {
+  const digits = String(phone || '')
+    .replace(/[\s\-()]/g, '')
+    .replace(/^\+/, '');
+  if (/^07[3-9]\d{8}$/.test(digits)) return `964${digits.slice(1)}`;
+  if (/^7[3-9]\d{8}$/.test(digits)) return `964${digits}`;
+  return digits.replace(/\D/g, '');
+}
 
-  const rows = [
-    [
-      {
-        text: '✅ پەسەندکرن و دروستکرنا کلیلێ (Confirm Order)',
-        callback_data: callbackData,
-      },
-    ],
+/**
+ * Detect AI Hub voucher-style orders vs account/subscription services.
+ */
+export function classifyOrderKind(items, itemsLabel = '', totalIQD = 0) {
+  const list = Array.isArray(items) ? items : [];
+  const hay = [
+    itemsLabel,
+    ...list.map((i) => `${i?.id || ''} ${i?.planId || ''} ${i?.slug || ''} ${i?.name || ''} ${i?.title || ''}`),
+  ]
+    .join(' ')
+    .toLowerCase();
+
+  const aiRe =
+    /ai\s*hub|ipbits\s*ai|voucher|\btst\b|daily|weekly|monthly|yearly|3months|1_day|7_days|30_days|90_days|1_year|test_1d|weekly_7d|monthly_30d|تێست|تیست|هەفتانە|مەهانە|ساڵانە|خاڵ|کلیل/;
+  if (aiRe.test(hay)) {
+    return { kind: 'ai', productName: list[0]?.name || itemsLabel || 'AI Hub' };
+  }
+
+  // Exact AI Hub price match (fallback when name is localized only)
+  const aiPrices = [2500, 5000, 12000, 25000, 50000];
+  const total = Number(totalIQD) || 0;
+  if (aiPrices.some((p) => Math.abs(total - p) < 1)) {
+    return { kind: 'ai', productName: list[0]?.name || itemsLabel || 'AI Hub' };
+  }
+
+  const productName =
+    list[0]?.name || list[0]?.title || String(itemsLabel || 'Subscription').split(',')[0].trim() || 'Subscription';
+
+  return { kind: 'account', productName };
+}
+
+export function inferAiTier(items, totalIQD) {
+  const list = Array.isArray(items) ? items : [];
+  const hay = list
+    .map((i) => `${i?.id || ''} ${i?.planId || ''} ${i?.name || ''}`)
+    .join(' ')
+    .toLowerCase();
+
+  const checks = [
+    [/1_day|test_1d|\b1d\b|تێست|تیست|daily|tst/, 'daily'],
+    [/7_days|weekly_7d|\b7d\b|هەفت|weekly/, 'weekly'],
+    [/90_days|quarterly|3months|٣ مەه/, '3months'],
+    [/1_year|yearly|\b1y\b|ساڵانە/, 'yearly'],
+    [/30_days|monthly_30d|\b30d\b|مەهانە|monthly/, 'monthly'],
   ];
+  for (const [re, tier] of checks) {
+    if (re.test(hay)) return tier;
+  }
+
+  const total = Number(totalIQD) || 0;
+  const byPrice = [
+    [2500, 'daily'],
+    [5000, 'weekly'],
+    [12000, 'monthly'],
+    [25000, '3months'],
+    [50000, 'yearly'],
+  ];
+  let best = 'daily';
+  let bestDiff = Infinity;
+  for (const [price, t] of byPrice) {
+    const d = Math.abs(total - price);
+    if (d < bestDiff) {
+      bestDiff = d;
+      best = t;
+    }
+  }
+  return best;
+}
+
+/**
+ * Smart checkout keyboard:
+ * - AI Hub → confirm_ai:phone:tier
+ * - Account service → confirm_acc:phone:encodedProduct
+ */
+export function buildSmartOrderKeyboard({
+  phone,
+  tier = 'daily',
+  productName = 'Subscription',
+  kind = 'account',
+  waUrl,
+}) {
+  const phoneDigits = toWhatsAppDigits(phone).slice(0, 15);
+  const rows = [];
+
+  if (kind === 'ai') {
+    const tierKey = String(tier || 'daily')
+      .trim()
+      .toLowerCase()
+      .slice(0, 12);
+    rows.push([
+      {
+        text: '✅ پەسەندکرن و کلیل (AI Hub)',
+        callback_data: `confirm_ai:${phoneDigits}:${tierKey}`.slice(0, 64),
+      },
+    ]);
+  } else {
+    const encoded = encodeURIComponent(String(productName || 'Subscription').slice(0, 48));
+    rows.push([
+      {
+        text: '📲 پەیوەندی ب واتساپێ (Account Service)',
+        callback_data: `confirm_acc:${phoneDigits}:${encoded}`.slice(0, 64),
+      },
+    ]);
+  }
 
   if (waUrl) {
     rows.push([{ text: '💬 واتساپ — پەیوەندی ب کڕیاری', url: waUrl }]);
   }
 
   return { inline_keyboard: rows };
+}
+
+/** @deprecated use buildSmartOrderKeyboard */
+export function buildConfirmOrderKeyboard({ orderId, phone, tier = 'daily', waUrl }) {
+  return buildSmartOrderKeyboard({
+    phone: phone || orderId,
+    tier,
+    kind: 'ai',
+    productName: 'AI Hub',
+    waUrl,
+  });
 }
 
 export function getAdminChatId() {
