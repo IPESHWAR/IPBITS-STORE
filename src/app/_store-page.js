@@ -679,16 +679,20 @@ export default function StorePage() {
               href={`${TELEGRAM_URL}?text=${encodeURIComponent(s.sponsorTelegramMsg)}`}
               target="_blank"
               rel="noopener noreferrer"
-              className={`${PILL_BTN} max-w-full h-auto min-h-9 flex-wrap sm:flex-nowrap py-1.5 group`}
+              className={`${PILL_BTN} max-w-full h-auto min-h-9 inline-flex items-center justify-center flex-wrap sm:flex-nowrap gap-1.5 px-3 py-1 text-[11px] sm:text-sm group`}
             >
-              <span className="text-emerald-600 dark:text-emerald-400/80 shrink-0" aria-hidden="true">
-                •
+              <span className="inline-flex items-center gap-1.5 shrink-0 whitespace-nowrap">
+                <span className="text-emerald-600 dark:text-emerald-400/80" aria-hidden="true">
+                  •
+                </span>
+                <span className="text-cyan-700 dark:text-cyan-300 text-[10px] sm:text-xs font-semibold tracking-wide">
+                  {s.sponsorTag}
+                </span>
+                <span className="text-slate-300 dark:text-white/20" aria-hidden="true">
+                  |
+                </span>
               </span>
-              <span className="text-cyan-700 dark:text-cyan-300 text-[10px] sm:text-xs font-semibold tracking-wide shrink-0">
-                {s.sponsorTag}
-              </span>
-              <span className="text-slate-300 dark:text-white/20">|</span>
-              <span className={`${BODY_SECONDARY} group-hover:text-slate-950 dark:group-hover:text-white text-[11px] sm:text-sm text-center sm:text-start leading-relaxed transition-colors`}>
+              <span className={`${BODY_SECONDARY} group-hover:text-slate-950 dark:group-hover:text-white text-[11px] sm:text-sm text-center sm:text-start leading-snug transition-colors min-w-0`}>
                 {s.sponsorText}
               </span>
               <ArrowUpRight className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-slate-500 dark:text-zinc-500 group-hover:text-emerald-600 dark:group-hover:text-emerald-300 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform shrink-0" />
