@@ -375,6 +375,18 @@ async function handleConfirmAcc(cq) {
 /** confirm:phone:productName — smart route to AI Hub key or account WhatsApp */
 async function handleConfirmGeneric(cq) {
   const data = String(cq.data || '');
+
+  // Debug / smoke-test button from checkout: confirm:test
+  if (data === 'confirm:test' || data.startsWith('confirm:test')) {
+    await answerCallbackQuery(cq.id, '✅ Confirm button کار دکەت', false);
+    const chatId = cq.message?.chat?.id;
+    await sendTelegramMessage(
+      chatId,
+      '✅ دوگمەیا Confirm هاتە وەرگرتن (confirm:test). سیستەم ئامادەیە.'
+    );
+    return;
+  }
+
   const parts = data.split(':');
   const phoneRaw = String(parts[1] || '').trim();
   const productName = parts.slice(2).join(':') || 'order';

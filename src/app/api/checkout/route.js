@@ -44,31 +44,27 @@ function buildCaption({ name, phone, itemsFormatted, finalIQD, paymentMethod, tr
 }
 
 async function dispatchTelegram({ botToken, chatId, caption, image, orderData = {}, replyMarkup }) {
-  const extraRows = (replyMarkup?.inline_keyboard || []).filter((row) => {
-    const data = row?.[0]?.callback_data || '';
-    return !String(data).startsWith('confirm:');
-  });
+  const messageText = caption;
+  const targetChatId = process.env.TELEGRAM_CHAT_ID || chatId || '5305335340';
 
+  // Proper object — JSON.stringify once on the full body (do NOT double-stringify reply_markup)
   const reply_markup = {
     inline_keyboard: [
       [
         {
           text: '✅ پەسەندکرن (Confirm)',
-          callback_data: `confirm:${orderData.whatsapp || orderData.phone || ''}:${orderData.tier || orderData.plan || 'daily'}`.slice(
-            0,
-            64
-          ),
+          callback_data: 'confirm:test',
         },
       ],
-      ...extraRows,
     ],
   };
 
   if (image?.base64) {
     const buffer = Buffer.from(image.base64, 'base64');
     const formData = new FormData();
-    formData.append('chat_id', chatId);
-    formData.append('caption', caption);
+    formData.append('chat_id', String(targetChatId));
+    formData.append('caption', messageText);
+    formData.append('parse_mode', 'HTML');
     formData.append('photo', new Blob([buffer], { type: image.type || 'image/jpeg' }), 'receipt.jpg');
     formData.append('reply_markup', JSON.stringify(reply_markup));
     return fetch(`https://api.telegram.org/bot${botToken}/sendPhoto`, {
@@ -81,20 +77,17 @@ async function dispatchTelegram({ botToken, chatId, caption, image, orderData = 
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      chat_id: chatId,
-      text: caption,
+      chat_id: process.env.TELEGRAM_CHAT_ID || '5305335340',
+      text: messageText,
+      parse_mode: 'HTML',
       reply_markup: {
         inline_keyboard: [
           [
             {
               text: '✅ پەسەندکرن (Confirm)',
-              callback_data: `confirm:${orderData.whatsapp || orderData.phone || ''}:${orderData.tier || orderData.plan || 'daily'}`.slice(
-                0,
-                64
-              ),
+              callback_data: 'confirm:test',
             },
           ],
-          ...extraRows,
         ],
       },
     }),
