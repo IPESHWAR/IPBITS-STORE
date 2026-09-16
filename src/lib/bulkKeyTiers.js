@@ -49,6 +49,8 @@ export const BULK_KEY_TIERS = {
 const TIER_ALIASES = {
   test: 'test',
   tst: 'test',
+  daily: 'test',
+  day: 'test',
   '1d': 'test',
   '1_day': 'test',
   weekly: 'weekly',

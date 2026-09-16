@@ -45,9 +45,17 @@ export async function GET(req) {
       );
     }
 
-    const webhookUrl = `${appUrl}/api/telegram/webhook`;
+    const webhookUrl = `${appUrl}/api/telegram-webhook`;
+    const secret = process.env.TELEGRAM_WEBHOOK_SECRET || '';
+    const params = new URLSearchParams({
+      url: webhookUrl,
+      allowed_updates: JSON.stringify(['callback_query', 'message']),
+      drop_pending_updates: 'false',
+    });
+    if (secret) params.set('secret_token', secret);
+
     const setRes = await fetch(
-      `https://api.telegram.org/bot${botToken}/setWebhook?url=${encodeURIComponent(webhookUrl)}&allowed_updates=${encodeURIComponent(JSON.stringify(['callback_query', 'message']))}`
+      `https://api.telegram.org/bot${botToken}/setWebhook?${params.toString()}`
     );
     const setJson = await setRes.json();
 
