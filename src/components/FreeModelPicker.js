@@ -125,39 +125,44 @@ export default function FreeModelPicker({
         aria-label={displayName(selected)}
         title={displayName(selected)}
         onClick={() => setOpen((v) => !v)}
-        className="h-8 px-2.5 rounded-full border border-white/10 bg-white/[0.04] hover:bg-white/[0.08] text-xs font-mono text-white/80 transition-all flex items-center gap-1.5 cursor-pointer backdrop-blur-md focus:outline-none focus-visible:ring-2 focus-visible:ring-white/20 disabled:opacity-50"
+        className="h-8 px-2.5 rounded-full border border-neutral-200/80 bg-neutral-50 hover:bg-neutral-100 text-xs font-mono text-neutral-700 dark:border-white/10 dark:bg-white/[0.04] dark:hover:bg-white/[0.08] dark:text-white/80 transition-all flex items-center gap-1.5 cursor-pointer backdrop-blur-md focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/30 dark:focus-visible:ring-white/20 disabled:opacity-50"
       >
         <span className="font-mono text-[11px] font-semibold tracking-wide tabular-nums">
           {modelAbbrev(selected)}
         </span>
         <ChevronDown
           size={12}
-          className={`shrink-0 text-white/45 transition-transform ${open ? 'rotate-180' : ''}`}
+          className={`shrink-0 text-neutral-400 dark:text-white/45 transition-transform ${open ? 'rotate-180' : ''}`}
         />
       </button>
 
       {open && (
-        <div className="absolute end-0 top-full mt-1.5 z-50 w-[min(22rem,calc(100vw-1.25rem))] rounded-2xl border border-white/10 bg-[#0c0e14]/95 shadow-2xl shadow-black/50 backdrop-blur-xl overflow-hidden">
+        <div className="absolute end-0 top-full mt-1.5 z-50 w-[calc(100vw-2rem)] max-w-sm sm:w-80 rounded-2xl border shadow-2xl backdrop-blur-xl overflow-hidden bg-white/95 border-neutral-200 text-neutral-800 dark:bg-[#0c0e14]/95 dark:border-white/10 dark:text-white dark:shadow-black/50">
           <div className="px-3 pt-2.5 pb-1.5 flex items-center justify-between gap-2">
-            <span className="text-[10px] font-semibold tracking-wide text-white/55">{countLabel}</span>
-            <span className="inline-flex items-center rounded-md bg-white/[0.06] border border-white/10 px-1.5 py-0.5 text-[9px] font-semibold text-white/70">
+            <span className="text-[10px] font-semibold tracking-wide text-neutral-500 dark:text-white/55 truncate min-w-0">
+              {countLabel}
+            </span>
+            <span className="shrink-0 inline-flex items-center rounded-md bg-neutral-100 border border-neutral-200/80 px-1.5 py-0.5 text-[9px] font-semibold text-neutral-600 dark:bg-white/[0.06] dark:border-white/10 dark:text-white/70">
               {labels.freeBadge || 'بەلاش / Free'}
             </span>
           </div>
           <div className="px-2.5 pb-2">
-            <label className="flex items-center gap-2 rounded-xl bg-white/[0.03] border border-white/10 px-2.5 py-1.5">
-              <Search size={13} className="text-white/40 shrink-0" />
+            <label className="flex items-center gap-2 rounded-xl bg-neutral-50 border border-neutral-200/80 px-2.5 py-1.5 dark:bg-white/[0.03] dark:border-white/10">
+              <Search size={13} className="text-neutral-400 dark:text-white/40 shrink-0" />
               <input
                 ref={searchRef}
                 type="search"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder={labels.searchModels || 'Gemini, DeepSeek, Llama...'}
-                className="w-full bg-transparent text-[11px] text-white/90 placeholder:text-white/35 focus:outline-none"
+                className="w-full min-w-0 bg-transparent text-[11px] text-neutral-800 placeholder:text-neutral-400 focus:outline-none dark:text-white/90 dark:placeholder:text-white/35"
               />
             </label>
           </div>
-          <div className="max-h-72 overflow-y-auto pb-1.5" role="listbox">
+          <div
+            className="max-h-60 overflow-y-auto overscroll-contain pb-1.5 [-webkit-overflow-scrolling:touch]"
+            role="listbox"
+          >
             {visibleFree.map((m) => {
               const active = m.id === model;
               const router = m.isRouter || m.id === OPENROUTER_FREE_ROUTER_ID;
@@ -170,38 +175,43 @@ export default function FreeModelPicker({
                   role="option"
                   aria-selected={active}
                   onClick={() => pick(m.id, locked)}
-                  className={`w-full text-start px-3 py-2 flex items-start gap-2 hover:bg-white/[0.05] cursor-pointer ${
-                    active ? 'bg-white/[0.07]' : ''
+                  className={`w-full text-start px-3 py-2.5 flex items-center gap-2 hover:bg-neutral-100 dark:hover:bg-white/[0.05] cursor-pointer ${
+                    active ? 'bg-neutral-100 dark:bg-white/[0.07]' : ''
                   } ${locked ? 'opacity-70' : ''}`}
                 >
                   {router ? (
-                    <Sparkles size={13} className="mt-0.5 text-sky-300/80 shrink-0" />
+                    <Sparkles size={13} className="text-sky-500 dark:text-sky-300/80 shrink-0" />
                   ) : (
-                    <span className="mt-0.5 w-3.5 shrink-0" />
+                    <span className="w-3.5 shrink-0" />
                   )}
-                  <span className="min-w-0 flex-1">
-                    <span className="flex items-center gap-1.5">
-                      <span className="truncate text-[12px] font-semibold text-white/90">{displayName(m)}</span>
+                  <span className="min-w-0 flex-1 flex flex-col gap-0.5">
+                    <span className="flex items-center gap-2 min-w-0 w-full">
+                      <span
+                        className="truncate min-w-0 flex-1 text-[12px] font-semibold text-neutral-800 dark:text-white/90"
+                        title={displayName(m)}
+                      >
+                        {displayName(m)}
+                      </span>
                       {locked ? (
                         <span className="shrink-0 text-[11px]" title={labels.paidLocked || 'Locked'}>
                           🔒
                         </span>
                       ) : (
-                        <span className="shrink-0 rounded-md bg-white/[0.06] border border-white/10 px-1 py-px text-[8px] font-semibold text-white/55">
+                        <span className="shrink-0 rounded-full bg-emerald-500/10 border border-emerald-500/20 px-1.5 py-0.5 text-[8px] font-semibold text-emerald-700 dark:text-emerald-300/90 whitespace-nowrap">
                           {labels.freeBadge || 'بەلاش / Free'}
                         </span>
                       )}
                     </span>
-                    <span className="block text-[10px] text-white/40 truncate">
+                    <span className="block text-[10px] text-neutral-500 dark:text-white/40 truncate">
                       {[m.provider, ctx ? `${ctx} ctx` : ''].filter(Boolean).join(' · ')}
                     </span>
                   </span>
-                  {active && <Check size={13} className="text-sky-300 shrink-0 mt-0.5" />}
+                  {active && <Check size={13} className="text-sky-500 dark:text-sky-300 shrink-0" />}
                 </button>
               );
             })}
             {visiblePaid.length > 0 && (
-              <div className="px-3 pt-2 pb-1 text-[10px] font-semibold text-white/45">
+              <div className="px-3 pt-2 pb-1 text-[10px] font-semibold text-neutral-500 dark:text-white/45">
                 {labels.premiumModelsSection || labels.premiumModels || 'Pro'}
               </div>
             )}
@@ -215,31 +225,39 @@ export default function FreeModelPicker({
                   role="option"
                   aria-selected={active}
                   onClick={() => pick(m.id, true)}
-                  className={`w-full text-start px-3 py-2 flex items-start gap-2 hover:bg-white/[0.05] cursor-pointer ${
-                    active ? 'bg-white/[0.07]' : ''
+                  className={`w-full text-start px-3 py-2.5 flex items-center gap-2 hover:bg-neutral-100 dark:hover:bg-white/[0.05] cursor-pointer ${
+                    active ? 'bg-neutral-100 dark:bg-white/[0.07]' : ''
                   } ${locked ? 'opacity-70' : ''}`}
                 >
-                  <span className="min-w-0 flex-1">
-                    <span className="flex items-center gap-1.5">
-                      <span className="truncate text-[12px] font-semibold text-white/90">{displayName(m)}</span>
+                  <span className="w-3.5 shrink-0" />
+                  <span className="min-w-0 flex-1 flex flex-col gap-0.5">
+                    <span className="flex items-center gap-2 min-w-0 w-full">
+                      <span
+                        className="truncate min-w-0 flex-1 text-[12px] font-semibold text-neutral-800 dark:text-white/90"
+                        title={displayName(m)}
+                      >
+                        {displayName(m)}
+                      </span>
                       {locked ? (
                         <span className="shrink-0 text-[11px]" title={labels.paidLocked || 'Locked'}>
                           🔒
                         </span>
                       ) : (
-                        <span className="shrink-0 text-[9px] font-semibold text-sky-300/80">Pro</span>
+                        <span className="shrink-0 rounded-full bg-sky-500/10 border border-sky-500/20 px-1.5 py-0.5 text-[8px] font-semibold text-sky-700 dark:text-sky-300/90 whitespace-nowrap">
+                          Pro
+                        </span>
                       )}
                     </span>
-                    <span className="block text-[10px] text-white/40 truncate">
+                    <span className="block text-[10px] text-neutral-500 dark:text-white/40 truncate">
                       {(locked ? '🔒 Pro · ' : 'Pro · ') + (m.provider || '')}
                     </span>
                   </span>
-                  {active && <Check size={13} className="text-sky-300 shrink-0 mt-0.5" />}
+                  {active && <Check size={13} className="text-sky-500 dark:text-sky-300 shrink-0" />}
                 </button>
               );
             })}
             {!visibleFree.length && !visiblePaid.length && (
-              <p className="px-3 py-3 text-[11px] text-white/40">{labels.searchModels}</p>
+              <p className="px-3 py-3 text-[11px] text-neutral-500 dark:text-white/40">{labels.searchModels}</p>
             )}
           </div>
         </div>
