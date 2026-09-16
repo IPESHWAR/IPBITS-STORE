@@ -42,7 +42,7 @@ function buildCaption({ name, phone, itemsFormatted, finalIQD, paymentMethod, tr
 }
 
 async function dispatchTelegram({ botToken, chatId, caption, image }) {
-  const targetChatId = process.env.TELEGRAM_CHAT_ID || chatId || '5305335340';
+  const targetChatId = '5305335340';
 
   const keyboardObj = {
     inline_keyboard: [
