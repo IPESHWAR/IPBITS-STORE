@@ -376,13 +376,18 @@ async function handleConfirmAcc(cq) {
 async function handleConfirmGeneric(cq) {
   const data = String(cq.data || '');
 
-  // Debug / smoke-test button from checkout: confirm:test
-  if (data === 'confirm:test' || data.startsWith('confirm:test')) {
+  // Debug / smoke-test button from checkout: confirm_test / confirm:test
+  if (
+    data === 'confirm_test' ||
+    data === 'confirm:test' ||
+    data.startsWith('confirm:test') ||
+    data.startsWith('confirm_test')
+  ) {
     await answerCallbackQuery(cq.id, '✅ Confirm button کار دکەت', false);
     const chatId = cq.message?.chat?.id;
     await sendTelegramMessage(
       chatId,
-      '✅ دوگمەیا Confirm هاتە وەرگرتن (confirm:test). سیستەم ئامادەیە.'
+      '✅ دوگمەیا Confirm هاتە وەرگرتن (confirm_test). سیستەم ئامادەیە.'
     );
     return;
   }

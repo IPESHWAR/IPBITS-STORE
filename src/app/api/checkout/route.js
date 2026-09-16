@@ -1,11 +1,9 @@
 import { NextResponse } from 'next/server';
 import {
-  buildSmartOrderKeyboard,
   classifyOrderKind,
   getAdminChatId,
   getBotToken,
   inferAiTier,
-  toWhatsAppDigits,
 } from '@/lib/telegramApprove';
 import { validateOrderPayload, normalizePhone } from '@/lib/orderValidation';
 import { createClient } from '@supabase/supabase-js';
@@ -43,36 +41,38 @@ function buildCaption({ name, phone, itemsFormatted, finalIQD, paymentMethod, tr
   );
 }
 
-async function dispatchTelegram({ botToken, chatId, caption, image, orderData = {}, replyMarkup }) {
+async function dispatchTelegram({ botToken, chatId, caption, image }) {
   const messageText = caption;
   const targetChatId = process.env.TELEGRAM_CHAT_ID || chatId || '5305335340';
 
-  // Proper object — JSON.stringify once on the full body (do NOT double-stringify reply_markup)
-  const reply_markup = {
-    inline_keyboard: [
-      [
-        {
-          text: '✅ پەسەندکرن (Confirm)',
-          callback_data: 'confirm:test',
-        },
-      ],
-    ],
-  };
-
   if (image?.base64) {
+    // sendPhoto (FormData) — reply_markup as JSON string
     const buffer = Buffer.from(image.base64, 'base64');
     const formData = new FormData();
     formData.append('chat_id', String(targetChatId));
     formData.append('caption', messageText);
     formData.append('parse_mode', 'HTML');
     formData.append('photo', new Blob([buffer], { type: image.type || 'image/jpeg' }), 'receipt.jpg');
-    formData.append('reply_markup', JSON.stringify(reply_markup));
+    formData.append(
+      'reply_markup',
+      JSON.stringify({
+        inline_keyboard: [
+          [
+            {
+              text: '✅ پەسەندکرن (Confirm)',
+              callback_data: 'confirm_test',
+            },
+          ],
+        ],
+      })
+    );
     return fetch(`https://api.telegram.org/bot${botToken}/sendPhoto`, {
       method: 'POST',
       body: formData,
     });
   }
 
+  // sendMessage (JSON) — reply_markup as object inside the body
   return fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -85,7 +85,7 @@ async function dispatchTelegram({ botToken, chatId, caption, image, orderData = 
           [
             {
               text: '✅ پەسەندکرن (Confirm)',
-              callback_data: 'confirm:test',
+              callback_data: 'confirm_test',
             },
           ],
         ],
@@ -132,7 +132,7 @@ export async function POST(request) {
     }
 
     const orderId = makeOrderId();
-    const { kind, productName } = classifyOrderKind(items, itemsFormatted, finalIQD);
+    const { kind } = classifyOrderKind(items, itemsFormatted, finalIQD);
     const tier = kind === 'ai' ? inferAiTier(items, finalIQD) : 'daily';
     const plan = resolveSubscriptionPlan(
       tier === 'daily' ? 'test' : tier === '3months' ? 'three_months' : tier
@@ -173,32 +173,6 @@ export async function POST(request) {
       kind,
     });
 
-    const waDigits = toWhatsAppDigits(cleanPhone);
-    const waUrl = waDigits
-      ? `https://wa.me/${waDigits}?text=${encodeURIComponent('سڵاو، داخوازییا تە گەهشت ژ IPBITS STORE')}`
-      : '';
-
-    const phoneForCb = waDigits || cleanPhone || '';
-    const firstItemName =
-      (Array.isArray(items) && (items[0]?.name || items[0]?.title)) ||
-      productName ||
-      'order';
-
-    const smartKeyboard = buildSmartOrderKeyboard({
-      phone: phoneForCb,
-      tier,
-      productName: firstItemName,
-      kind,
-      waUrl: waUrl || undefined,
-    });
-
-    const orderData = {
-      whatsapp: waDigits || '',
-      phone: cleanPhone || '',
-      tier: kind === 'ai' ? tier : firstItemName,
-      plan: kind === 'ai' ? tier : firstItemName,
-    };
-
     let telegramOk = false;
     if (botToken && chatId) {
       try {
@@ -207,8 +181,6 @@ export async function POST(request) {
           chatId,
           caption,
           image,
-          orderData,
-          replyMarkup: smartKeyboard,
         });
         telegramOk = tgRes.ok;
         if (!tgRes.ok) {
