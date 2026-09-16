@@ -41,7 +41,7 @@ function buildCaption({ name, phone, itemsFormatted, finalIQD, paymentMethod, tr
   );
 }
 
-async function dispatchTelegram({ botToken, chatId, caption, image }) {
+async function dispatchTelegram({ botToken, chatId, caption, image, orderId }) {
   const targetChatId = '5305335340';
 
   const keyboardObj = {
@@ -49,7 +49,7 @@ async function dispatchTelegram({ botToken, chatId, caption, image }) {
       [
         {
           text: '✅ پەسەندکرن (Confirm)',
-          callback_data: 'confirm_test',
+          callback_data: `approve:${orderId}`,
         },
       ],
     ],
@@ -170,6 +170,7 @@ export async function POST(request) {
           chatId,
           caption,
           image,
+          orderId,
         });
         telegramOk = tgRes.ok;
         if (!tgRes.ok) {
