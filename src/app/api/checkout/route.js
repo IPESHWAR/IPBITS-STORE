@@ -54,6 +54,7 @@ async function dispatchTelegram({ botToken, chatId, caption, image }) {
       ],
     ],
   };
+  let res;
   if (image?.base64) {
     const buffer = Buffer.from(image.base64, 'base64');
     const formData = new FormData();
@@ -61,20 +62,25 @@ async function dispatchTelegram({ botToken, chatId, caption, image }) {
     formData.append('caption', caption);
     formData.append('photo', new Blob([buffer], { type: image.type || 'image/jpeg' }), 'receipt.jpg');
     formData.append('reply_markup', JSON.stringify(keyboardObj));
-    return fetch(`https://api.telegram.org/bot${botToken}/sendPhoto`, {
+    res = await fetch(`https://api.telegram.org/bot${botToken}/sendPhoto`, {
       method: 'POST',
       body: formData,
     });
+  } else {
+    res = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: String(targetChatId),
+        text: caption,
+        reply_markup: keyboardObj,
+      }),
+    });
   }
-  return fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      chat_id: String(targetChatId),
-      text: caption,
-      reply_markup: keyboardObj,
-    }),
-  });
+
+  const tgResText = await res.text();
+  console.log('=== TELEGRAM API RESPONSE ===', res.status, tgResText);
+  return { ok: res.ok, status: res.status, text: tgResText };
 }
 
 export async function POST(request) {
@@ -167,10 +173,14 @@ export async function POST(request) {
         });
         telegramOk = tgRes.ok;
         if (!tgRes.ok) {
-          const errText = await tgRes.text().catch(() => '');
-          console.error('Telegram dispatch failed:', tgRes.status, errText);
+          console.error('Telegram dispatch failed:', tgRes.status, tgRes.text);
         } else if (supabase) {
-          const tgJson = await tgRes.json().catch(() => ({}));
+          let tgJson = {};
+          try {
+            tgJson = JSON.parse(tgRes.text || '{}');
+          } catch {
+            tgJson = {};
+          }
           const msgId = tgJson?.result?.message_id;
           if (msgId) {
             await supabase
