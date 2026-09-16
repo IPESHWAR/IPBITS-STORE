@@ -42,54 +42,37 @@ function buildCaption({ name, phone, itemsFormatted, finalIQD, paymentMethod, tr
 }
 
 async function dispatchTelegram({ botToken, chatId, caption, image }) {
-  const messageText = caption;
   const targetChatId = process.env.TELEGRAM_CHAT_ID || chatId || '5305335340';
 
+  const keyboardObj = {
+    inline_keyboard: [
+      [
+        {
+          text: '✅ پەسەندکرن (Confirm)',
+          callback_data: 'confirm_test',
+        },
+      ],
+    ],
+  };
   if (image?.base64) {
-    // sendPhoto (FormData) — reply_markup as JSON string
     const buffer = Buffer.from(image.base64, 'base64');
     const formData = new FormData();
     formData.append('chat_id', String(targetChatId));
-    formData.append('caption', messageText);
-    formData.append('parse_mode', 'HTML');
+    formData.append('caption', caption);
     formData.append('photo', new Blob([buffer], { type: image.type || 'image/jpeg' }), 'receipt.jpg');
-    formData.append(
-      'reply_markup',
-      JSON.stringify({
-        inline_keyboard: [
-          [
-            {
-              text: '✅ پەسەندکرن (Confirm)',
-              callback_data: 'confirm_test',
-            },
-          ],
-        ],
-      })
-    );
+    formData.append('reply_markup', JSON.stringify(keyboardObj));
     return fetch(`https://api.telegram.org/bot${botToken}/sendPhoto`, {
       method: 'POST',
       body: formData,
     });
   }
-
-  // sendMessage (JSON) — reply_markup as object inside the body
   return fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      chat_id: process.env.TELEGRAM_CHAT_ID || '5305335340',
-      text: messageText,
-      parse_mode: 'HTML',
-      reply_markup: {
-        inline_keyboard: [
-          [
-            {
-              text: '✅ پەسەندکرن (Confirm)',
-              callback_data: 'confirm_test',
-            },
-          ],
-        ],
-      },
+      chat_id: String(targetChatId),
+      text: caption,
+      reply_markup: keyboardObj,
     }),
   });
 }
