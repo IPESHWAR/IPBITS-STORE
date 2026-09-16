@@ -43,14 +43,34 @@ function buildCaption({ name, phone, itemsFormatted, finalIQD, paymentMethod, tr
   );
 }
 
-async function dispatchTelegram({ botToken, chatId, caption, image, replyMarkup }) {
+async function dispatchTelegram({ botToken, chatId, caption, image, orderData = {}, replyMarkup }) {
+  const extraRows = (replyMarkup?.inline_keyboard || []).filter((row) => {
+    const data = row?.[0]?.callback_data || '';
+    return !String(data).startsWith('confirm:');
+  });
+
+  const reply_markup = {
+    inline_keyboard: [
+      [
+        {
+          text: '✅ پەسەندکرن (Confirm)',
+          callback_data: `confirm:${orderData.whatsapp || orderData.phone || ''}:${orderData.tier || orderData.plan || 'daily'}`.slice(
+            0,
+            64
+          ),
+        },
+      ],
+      ...extraRows,
+    ],
+  };
+
   if (image?.base64) {
     const buffer = Buffer.from(image.base64, 'base64');
     const formData = new FormData();
     formData.append('chat_id', chatId);
     formData.append('caption', caption);
     formData.append('photo', new Blob([buffer], { type: image.type || 'image/jpeg' }), 'receipt.jpg');
-    if (replyMarkup) formData.append('reply_markup', JSON.stringify(replyMarkup));
+    formData.append('reply_markup', JSON.stringify(reply_markup));
     return fetch(`https://api.telegram.org/bot${botToken}/sendPhoto`, {
       method: 'POST',
       body: formData,
@@ -63,7 +83,20 @@ async function dispatchTelegram({ botToken, chatId, caption, image, replyMarkup 
     body: JSON.stringify({
       chat_id: chatId,
       text: caption,
-      reply_markup: replyMarkup,
+      reply_markup: {
+        inline_keyboard: [
+          [
+            {
+              text: '✅ پەسەندکرن (Confirm)',
+              callback_data: `confirm:${orderData.whatsapp || orderData.phone || ''}:${orderData.tier || orderData.plan || 'daily'}`.slice(
+                0,
+                64
+              ),
+            },
+          ],
+          ...extraRows,
+        ],
+      },
     }),
   });
 }
@@ -157,8 +190,6 @@ export async function POST(request) {
       (Array.isArray(items) && (items[0]?.name || items[0]?.title)) ||
       productName ||
       'order';
-    // Telegram callback_data max length is 64 bytes
-    const confirmCallback = `confirm:${phoneForCb}:${String(firstItemName).slice(0, 40)}`.slice(0, 64);
 
     const smartKeyboard = buildSmartOrderKeyboard({
       phone: phoneForCb,
@@ -168,16 +199,11 @@ export async function POST(request) {
       waUrl: waUrl || undefined,
     });
 
-    const replyMarkup = {
-      inline_keyboard: [
-        [
-          {
-            text: '✅ پەسەندکرن (Confirm)',
-            callback_data: confirmCallback,
-          },
-        ],
-        ...(smartKeyboard.inline_keyboard || []),
-      ],
+    const orderData = {
+      whatsapp: waDigits || '',
+      phone: cleanPhone || '',
+      tier: kind === 'ai' ? tier : firstItemName,
+      plan: kind === 'ai' ? tier : firstItemName,
     };
 
     let telegramOk = false;
@@ -188,7 +214,8 @@ export async function POST(request) {
           chatId,
           caption,
           image,
-          replyMarkup,
+          orderData,
+          replyMarkup: smartKeyboard,
         });
         telegramOk = tgRes.ok;
         if (!tgRes.ok) {
