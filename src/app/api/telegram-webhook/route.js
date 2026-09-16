@@ -372,6 +372,35 @@ async function handleConfirmAcc(cq) {
   await sendTelegramMessage(chatId, body, 'HTML', replyMarkup);
 }
 
+/** confirm:phone:productName — smart route to AI Hub key or account WhatsApp */
+async function handleConfirmGeneric(cq) {
+  const data = String(cq.data || '');
+  const parts = data.split(':');
+  const phoneRaw = String(parts[1] || '').trim();
+  const productName = parts.slice(2).join(':') || 'order';
+  const phone = toWhatsAppDigits(phoneRaw);
+  const hay = productName.toLowerCase();
+
+  const isAi =
+    /ai\s*hub|voucher|daily|weekly|monthly|yearly|tst|تێست|تیست|هەفت|مەهانە|ساڵانە|کلیل|خاڵ/.test(
+      hay
+    );
+
+  if (isAi) {
+    let tier = 'daily';
+    if (/week|هەفت|7/.test(hay)) tier = 'weekly';
+    else if (/year|ساڵ/.test(hay)) tier = 'yearly';
+    else if (/3\s*m|٩٠|90/.test(hay)) tier = '3months';
+    else if (/month|مەه|30/.test(hay)) tier = 'monthly';
+    cq.data = `confirm_ai:${phone || phoneRaw}:${tier}`;
+    await handleConfirmAi(cq);
+    return;
+  }
+
+  cq.data = `confirm_acc:${phone || phoneRaw}:${encodeURIComponent(productName)}`;
+  await handleConfirmAcc(cq);
+}
+
 /** Legacy approve_order:<ref>:<tier> → confirm_ai */
 async function handleApproveOrderCallback(cq) {
   const data = String(cq.data || '');
@@ -433,6 +462,10 @@ export async function POST(req) {
       const cq = body.callback_query;
       const data = String(cq.data || '');
 
+      if (data.startsWith('confirm:')) {
+        await handleConfirmGeneric(cq);
+        return okResponse();
+      }
       if (data.startsWith('confirm_ai:')) {
         await handleConfirmAi(cq);
         return okResponse();

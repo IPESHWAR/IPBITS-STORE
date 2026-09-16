@@ -152,13 +152,33 @@ export async function POST(request) {
       ? `https://wa.me/${waDigits}?text=${encodeURIComponent('سڵاو، داخوازییا تە گەهشت ژ IPBITS STORE')}`
       : '';
 
-    const replyMarkup = buildSmartOrderKeyboard({
-      phone: waDigits || cleanPhone,
+    const phoneForCb = waDigits || cleanPhone || '';
+    const firstItemName =
+      (Array.isArray(items) && (items[0]?.name || items[0]?.title)) ||
+      productName ||
+      'order';
+    // Telegram callback_data max length is 64 bytes
+    const confirmCallback = `confirm:${phoneForCb}:${String(firstItemName).slice(0, 40)}`.slice(0, 64);
+
+    const smartKeyboard = buildSmartOrderKeyboard({
+      phone: phoneForCb,
       tier,
-      productName,
+      productName: firstItemName,
       kind,
       waUrl: waUrl || undefined,
     });
+
+    const replyMarkup = {
+      inline_keyboard: [
+        [
+          {
+            text: '✅ پەسەندکرن (Confirm)',
+            callback_data: confirmCallback,
+          },
+        ],
+        ...(smartKeyboard.inline_keyboard || []),
+      ],
+    };
 
     let telegramOk = false;
     if (botToken && chatId) {
