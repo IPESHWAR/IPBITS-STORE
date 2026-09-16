@@ -1,4 +1,12 @@
 import { createClient } from '@supabase/supabase-js';
+import {
+  answerCallbackQuery,
+  editTelegramMessage,
+  getBotToken,
+  isAuthorizedAdminChat,
+  getAdminChatId,
+} from '@/lib/telegramApprove';
+import { normalizePhone } from '@/lib/orderValidation';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -79,10 +87,6 @@ function okResponse() {
   });
 }
 
-function getBotToken() {
-  return process.env.TELEGRAM_BOT_TOKEN || '';
-}
-
 function getSupabase() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseKey =
@@ -130,10 +134,7 @@ async function generateKeysLikeScript(tier, count) {
     const randomNum = Math.floor(1000 + Math.random() * 9000);
     const code = `IPBITS-${tier.prefix}-${randomNum}`;
 
-    const orKey = await createOpenRouterKey(`${code}-${Date.now()}`, tier.limit);
-    if (!orKey) {
-      throw new Error(`نەشیا کلیلێ بۆ ${code} ل OpenRouter دروست بکەت`);
-    }
+    await createOpenRouterKey(`${code}-${Date.now()}`, tier.limit);
 
     const { error } = await supabase.from('vouchers').insert([
       {
@@ -176,8 +177,8 @@ function parseGenArgs(text) {
   return { tier: resolveTier(tierRaw), tierRaw, count };
 }
 
-async function sendTelegramMessage(chatId, text, parseMode) {
-  const botToken = getBotToken();
+async function sendTelegramMessage(chatId, text, parseMode, replyMarkup) {
+  const botToken = getBotToken() || process.env.TELEGRAM_BOT_TOKEN;
   if (!botToken) return;
 
   const payload = {
@@ -185,6 +186,7 @@ async function sendTelegramMessage(chatId, text, parseMode) {
     text,
   };
   if (parseMode) payload.parse_mode = parseMode;
+  if (replyMarkup) payload.reply_markup = replyMarkup;
 
   await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
     method: 'POST',
@@ -202,69 +204,253 @@ function formatSuccessMessage(codes, tier) {
   );
 }
 
+function toWhatsAppDigits(phone) {
+  const digits = normalizePhone(phone).replace(/^\+/, '');
+  if (/^07[3-9]\d{8}$/.test(digits)) return `964${digits.slice(1)}`;
+  return digits.replace(/\D/g, '');
+}
+
+function buildCustomerWaMessage(code, tier) {
+  return (
+    `سڵاو! داخوازییا تە هاتە پەسەندکرن ژ IPBITS STORE.\n\n` +
+    `🔑 کلیلێ چالاککرنێ:\n${code}\n\n` +
+    `📦 ${tier.labelEn} (${tier.durationEn})\n` +
+    `تکایە ڤێ کلیلێ د AI Hub دا بکاربینە.`
+  );
+}
+
+function isAuthorizedChatId(chatId) {
+  return (
+    String(chatId) === HARDCODED_AUTHORIZED_CHAT_ID ||
+    String(chatId) === String(process.env.TELEGRAM_CHAT_ID || '') ||
+    String(chatId) === String(process.env.ADMIN_CHAT_ID || '')
+  );
+}
+
 /**
- * Telegram webhook — authorized /gen key generation only.
- * Does not modify checkout or order notification routes.
+ * 1-click Confirm Order: generate voucher, mark order completed, WhatsApp deep link.
+ * callback_data: approve_order:<orderId_or_phone>:<tier>
+ */
+async function handleApproveOrderCallback(cq) {
+  const data = String(cq.data || '');
+  const chat = cq.message?.chat || {};
+  const chatId = chat.id;
+  const messageId = cq.message?.message_id;
+  const hasPhoto = !!(cq.message?.photo && cq.message.photo.length);
+  const originalText = cq.message?.caption || cq.message?.text || '';
+
+  if (!isAuthorizedChatId(chatId) && !isAuthorizedAdminChat(chat, getAdminChatId())) {
+    await answerCallbackQuery(cq.id, '❌ Unauthorized', true);
+    return;
+  }
+
+  const parts = data.split(':');
+  // approve_order : ref : tier
+  const ref = String(parts[1] || '').trim();
+  const tierRaw = String(parts[2] || 'daily').trim();
+  const tier = resolveTier(tierRaw) || resolveTier('daily');
+
+  if (!ref) {
+    await answerCallbackQuery(cq.id, '❌ Missing order ref', true);
+    return;
+  }
+
+  const supabase = getSupabase();
+  let order = null;
+  if (supabase) {
+    const byId = await supabase.from('orders').select('*').eq('id', ref).maybeSingle();
+    if (byId.data) {
+      order = byId.data;
+    } else {
+      const phoneGuess = normalizePhone(ref);
+      const byPhone = await supabase
+        .from('orders')
+        .select('*')
+        .eq('customer_phone', phoneGuess)
+        .eq('status', 'pending')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      order = byPhone.data || null;
+    }
+  }
+
+  if (order && (order.status === 'completed' || order.status === 'sent' || order.status === 'approved') && order.license_key) {
+    const phone = order.customer_phone || ref;
+    const waDigits = toWhatsAppDigits(phone);
+    const waText = buildCustomerWaMessage(order.license_key, tier);
+    const waUrl = waDigits
+      ? `https://wa.me/${waDigits}?text=${encodeURIComponent(waText)}`
+      : '';
+    await answerCallbackQuery(cq.id, 'ئۆردەر بەری نھا هاتە پەسەندکرن ✅', true);
+    await editTelegramMessage({
+      chatId,
+      messageId,
+      isCaption: hasPhoto,
+      text:
+        `✅ داخوازی هاتە پەسەندکرن!\n` +
+        `کلیل: <code>${order.license_key}</code>\n` +
+        (waUrl
+          ? `<a href="${waUrl}">📲 کلیک ل ڤێرە بکە بۆ هنارتنا کلیلێ ب واتساپێ</a>`
+          : ''),
+      replyMarkup: waUrl
+        ? { inline_keyboard: [[{ text: '📲 هنارتنا کلیلێ ب واتساپێ', url: waUrl }]] }
+        : { inline_keyboard: [] },
+    });
+    return;
+  }
+
+  try {
+    const codes = await generateKeysLikeScript(tier, 1);
+    const code = codes[0];
+    if (!code) throw new Error('generation_failed');
+
+    const phone = order?.customer_phone || (/^\d+$/.test(ref) ? ref : '');
+    const waDigits = toWhatsAppDigits(phone);
+    const waText = buildCustomerWaMessage(code, tier);
+    const waUrl = waDigits
+      ? `https://wa.me/${waDigits}?text=${encodeURIComponent(waText)}`
+      : '';
+
+    if (supabase && order?.id) {
+      await supabase
+        .from('orders')
+        .update({
+          status: 'completed',
+          license_key: code,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', order.id);
+    } else if (supabase && phone) {
+      await supabase
+        .from('orders')
+        .update({
+          status: 'completed',
+          license_key: code,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('customer_phone', normalizePhone(phone))
+        .eq('status', 'pending');
+    }
+
+    const approvedBody =
+      `✅ داخوازی هاتە پەسەندکرن!\n` +
+      `کلیل: <code>${code}</code>\n` +
+      `(Tier: ${tier.labelEn} | ${tier.durationEn})\n` +
+      (waUrl
+        ? `<a href="${waUrl}">📲 کلیک ل ڤێرە بکە بۆ هنارتنا کلیلێ ب واتساپێ</a>`
+        : '⚠️ ژمارا واتساپی نەهاتە دیتن');
+
+    const replyMarkup = waUrl
+      ? {
+          inline_keyboard: [[{ text: '📲 هنارتنا کلیلێ ب واتساپێ', url: waUrl }]],
+        }
+      : { inline_keyboard: [] };
+
+    await editTelegramMessage({
+      chatId,
+      messageId,
+      isCaption: hasPhoto,
+      text: `${originalText ? `${originalText}\n\n━━━━━━━━━━━━━━━━━━━\n` : ''}${approvedBody}`,
+      replyMarkup,
+    });
+
+    await answerCallbackQuery(cq.id, '✅ هاتە پەسەندکرن', false);
+  } catch (err) {
+    console.error('[telegram-webhook] approve_order failed:', err);
+    await answerCallbackQuery(cq.id, `❌ ${err?.message || 'Failed'}`, true);
+  }
+}
+
+async function handleAuthorizedText(message) {
+  const chatId = message.chat.id;
+  const text = (message.text || '').trim();
+
+  if (text.toLowerCase().startsWith('/gen')) {
+    try {
+      const { tier, tierRaw, count } = parseGenArgs(text);
+      if (!tier) {
+        await sendTelegramMessage(
+          chatId,
+          `❌ خەلەتی: unknown tier "${tierRaw}"\nبۆ چێکرنا کلیلێ بنڤیسە: /gen daily`
+        );
+        return;
+      }
+
+      const codes = await generateKeysLikeScript(tier, count);
+      if (!codes.length) throw new Error('generation_failed');
+      await sendTelegramMessage(chatId, formatSuccessMessage(codes, tier), 'HTML');
+    } catch (err) {
+      await sendTelegramMessage(chatId, `❌ خەلەتی: ${err?.message || err}`);
+    }
+    return;
+  }
+
+  await sendTelegramMessage(
+    chatId,
+    'بۆت کار دکەت! بۆ چێکرنا کلیلێ بنڤیسە: /gen daily'
+  );
+}
+
+/**
+ * Telegram webhook — /gen keys + 1-click order Confirm.
+ * Top-up / legacy callbacks are forwarded to /api/telegram/webhook.
  */
 export async function POST(req) {
   try {
-    const body = await req.json();
+    const body = await req.json().catch(() => null);
+    if (!body) return okResponse();
+
+    // ── callback_query (Confirm Order button) ──
+    if (body.callback_query) {
+      const cq = body.callback_query;
+      const data = String(cq.data || '');
+
+      if (data.startsWith('approve_order:')) {
+        await handleApproveOrderCallback(cq);
+        return okResponse();
+      }
+
+      // Preserve existing top-up / reject / legacy order handlers
+      try {
+        const { POST: handleApprovalWebhook } = await import(
+          '@/app/api/telegram/webhook/route'
+        );
+        const forwarded = new Request(req.url, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        await handleApprovalWebhook(forwarded);
+      } catch (err) {
+        console.error('[telegram-webhook] callback forward error:', err);
+        await answerCallbackQuery(cq.id, '❌ Handler error', true);
+      }
+      return okResponse();
+    }
+
     const message = body.message || body.channel_post || body.edited_message;
     if (!message || !message.text) {
-      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+      return okResponse();
     }
 
     const chatId = message.chat.id;
-    const text = (message.text || '').trim();
     const botToken = process.env.TELEGRAM_BOT_TOKEN;
-
     if (!botToken) {
       console.error('[telegram-webhook] TELEGRAM_BOT_TOKEN missing');
       return okResponse();
     }
 
-    const isAuthorized =
-      String(chatId) === HARDCODED_AUTHORIZED_CHAT_ID ||
-      String(chatId) === String(process.env.TELEGRAM_CHAT_ID || '');
-
-    if (!isAuthorized) {
+    if (!isAuthorizedChatId(chatId)) {
       await sendTelegramMessage(chatId, `Unauthorized ID: ${chatId}`);
-      return new Response(JSON.stringify({ ok: true }), { status: 200 });
-    }
-
-    if (text.toLowerCase().startsWith('/gen')) {
-      try {
-        const { tier, tierRaw, count } = parseGenArgs(text);
-        if (!tier) {
-          await sendTelegramMessage(
-            chatId,
-            `❌ خەلەتی: unknown tier "${tierRaw}"\nبۆ چێکرنا کلیلێ بنڤیسە: /gen daily`
-          );
-          return okResponse();
-        }
-
-        const codes = await generateKeysLikeScript(tier, count);
-        if (!codes.length) {
-          throw new Error('generation_failed');
-        }
-
-        await sendTelegramMessage(chatId, formatSuccessMessage(codes, tier), 'HTML');
-      } catch (err) {
-        await sendTelegramMessage(chatId, `❌ خەلەتی: ${err?.message || err}`);
-      }
-
       return okResponse();
     }
 
-    await sendTelegramMessage(
-      chatId,
-      'بۆت کار دکەت! بۆ چێکرنا کلیلێ بنڤیسە: /gen daily'
-    );
-
+    await handleAuthorizedText(message);
     return okResponse();
   } catch (error) {
     console.error('[telegram-webhook] error:', error);
-    return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    return okResponse();
   }
 }
 
@@ -273,6 +459,7 @@ export async function GET() {
     JSON.stringify({
       ok: true,
       endpoint: '/api/telegram-webhook',
+      features: ['/gen', 'approve_order callback'],
     }),
     { status: 200, headers: { 'Content-Type': 'application/json' } }
   );

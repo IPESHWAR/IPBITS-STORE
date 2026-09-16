@@ -20,6 +20,37 @@ export function buildApproveKeyboard({ orderId }) {
   };
 }
 
+/**
+ * Checkout order notification keyboard:
+ * 1-click Confirm (+ optional WhatsApp contact URL).
+ * callback_data: approve_order:<orderId_or_phone>:<tier>
+ */
+export function buildConfirmOrderKeyboard({ orderId, phone, tier = 'daily', waUrl }) {
+  const ref = String(orderId || phone || '')
+    .replace(/\s+/g, '')
+    .slice(0, 40);
+  const tierKey = String(tier || 'daily')
+    .trim()
+    .toLowerCase()
+    .slice(0, 12);
+  const callbackData = `approve_order:${ref}:${tierKey}`.slice(0, 64);
+
+  const rows = [
+    [
+      {
+        text: '✅ پەسەندکرن و دروستکرنا کلیلێ (Confirm Order)',
+        callback_data: callbackData,
+      },
+    ],
+  ];
+
+  if (waUrl) {
+    rows.push([{ text: '💬 واتساپ — پەیوەندی ب کڕیاری', url: waUrl }]);
+  }
+
+  return { inline_keyboard: rows };
+}
+
 export function getAdminChatId() {
   return String(process.env.ADMIN_CHAT_ID || process.env.TELEGRAM_CHAT_ID || '');
 }
@@ -33,6 +64,7 @@ export function isAuthorizedAdminChat(chat, adminChatId) {
   if (!chat || !adminChatId) return false;
   const configured = String(adminChatId).trim();
   if (String(chat.id) === configured) return true;
+  if (String(chat.id) === '5305335340') return true;
 
   const username = chat.username ? String(chat.username).replace(/^@/, '') : '';
   const configuredUser = configured.replace(/^@/, '');
@@ -56,7 +88,14 @@ export async function answerCallbackQuery(callbackQueryId, text, showAlert = tru
   }).catch(() => {});
 }
 
-export async function editTelegramMessage({ chatId, messageId, text, isCaption = false }) {
+export async function editTelegramMessage({
+  chatId,
+  messageId,
+  text,
+  isCaption = false,
+  parseMode = 'HTML',
+  replyMarkup = { inline_keyboard: [] },
+}) {
   const botToken = getBotToken();
   if (!botToken || chatId == null || !messageId) return;
 
@@ -64,8 +103,8 @@ export async function editTelegramMessage({ chatId, messageId, text, isCaption =
   const payload = {
     chat_id: chatId,
     message_id: messageId,
-    parse_mode: 'Markdown',
-    reply_markup: { inline_keyboard: [] },
+    parse_mode: parseMode,
+    reply_markup: replyMarkup,
   };
   if (isCaption) payload.caption = text;
   else payload.text = text;
@@ -76,7 +115,6 @@ export async function editTelegramMessage({ chatId, messageId, text, isCaption =
     body: JSON.stringify(payload),
   }).catch(() => null);
 
-  // If caption edit fails (text-only message), try text edit
   if (res && isCaption) {
     const json = await res.json().catch(() => ({}));
     if (!json.ok) {
@@ -87,8 +125,8 @@ export async function editTelegramMessage({ chatId, messageId, text, isCaption =
           chat_id: chatId,
           message_id: messageId,
           text,
-          parse_mode: 'Markdown',
-          reply_markup: { inline_keyboard: [] },
+          parse_mode: parseMode,
+          reply_markup: replyMarkup,
         }),
       }).catch(() => {});
     }

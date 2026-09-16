@@ -1,6 +1,12 @@
 import { NextResponse } from 'next/server';
-import { getAdminChatId, getBotToken } from '@/lib/telegramApprove';
+import {
+  buildConfirmOrderKeyboard,
+  getAdminChatId,
+  getBotToken,
+} from '@/lib/telegramApprove';
 import { validateOrderPayload, normalizePhone } from '@/lib/orderValidation';
+import { createClient } from '@supabase/supabase-js';
+import { resolveSubscriptionPlan } from '@/config/plans';
 
 const GOOGLE_SCRIPT_URL =
   'https://script.google.com/macros/s/AKfycbz6cPrMaQLa-3W5opaOCN8Scq5DS-OBUIM1wIzjS7oVS9JYk9EdGvYvLY-EWgCjb7j3/exec';
@@ -11,10 +17,65 @@ function toWhatsAppDigits(phone) {
   return digits.replace(/\D/g, '');
 }
 
-function buildCaption({ name, phone, itemsFormatted, finalIQD, paymentMethod, transactionId, note }) {
+function makeOrderId() {
+  return `ord_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
+}
+
+/** Map checkout line items → bulk voucher tier (daily/weekly/monthly/…) */
+function inferOrderTier(items, totalIQD) {
+  const list = Array.isArray(items) ? items : [];
+  const hay = list
+    .map((i) => `${i?.id || ''} ${i?.planId || ''} ${i?.name || ''} ${i?.title || ''}`)
+    .join(' ')
+    .toLowerCase();
+
+  const checks = [
+    [/1_day|test_1d|\b1d\b|تێست|تیست|daily/, 'daily'],
+    [/7_days|weekly_7d|\b7d\b|هەفت|weekly/, 'weekly'],
+    [/90_days|quarterly|3months|٣ مەه|3 مەه/, '3months'],
+    [/1_year|yearly|\b1y\b|ساڵانە/, 'yearly'],
+    [/30_days|monthly_30d|\b30d\b|مەهانە|monthly/, 'monthly'],
+  ];
+  for (const [re, tier] of checks) {
+    if (re.test(hay)) return tier;
+  }
+
+  const total = Number(totalIQD) || 0;
+  if (total > 0) {
+    const byPrice = [
+      [2500, 'daily'],
+      [5000, 'weekly'],
+      [12000, 'monthly'],
+      [25000, '3months'],
+      [50000, 'yearly'],
+    ];
+    let best = 'monthly';
+    let bestDiff = Infinity;
+    for (const [price, t] of byPrice) {
+      const d = Math.abs(total - price);
+      if (d < bestDiff) {
+        bestDiff = d;
+        best = t;
+      }
+    }
+    return best;
+  }
+
+  return 'daily';
+}
+
+function getSupabaseAdmin() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) return null;
+  return createClient(url, key);
+}
+
+function buildCaption({ name, phone, itemsFormatted, finalIQD, paymentMethod, transactionId, note, orderId }) {
   return (
     `🛍 داخوازیەکا نوی گەهشت! (IPBITS STORE)\n` +
     `━━━━━━━━━━━━━━━━━━━\n` +
+    `🆔 ئۆردەر: ${orderId || '—'}\n` +
     `👤 کڕیار: ${name || 'نەدیار'}\n` +
     `📞 واتساپ: ${phone || 'نینە'}\n` +
     `💳 ڕێکا پارەدانێ: ${paymentMethod || 'نەدیار'}\n` +
@@ -88,6 +149,33 @@ export async function POST(request) {
       return NextResponse.json({ success: false, code: validation.code, error: validation.code }, { status: 400 });
     }
 
+    const orderId = makeOrderId();
+    const tier = inferOrderTier(items, finalIQD);
+    const plan = resolveSubscriptionPlan(
+      tier === 'daily' ? 'test' : tier === '3months' ? 'three_months' : tier
+    );
+
+    const supabase = getSupabaseAdmin();
+    if (supabase) {
+      const { error: orderErr } = await supabase.from('orders').insert({
+        id: orderId,
+        customer_name: customerName,
+        customer_phone: cleanPhone,
+        items: Array.isArray(items) ? items : [{ name: itemsFormatted }],
+        items_label: itemsFormatted,
+        total_iqd: finalIQD,
+        total_usd: Number(totalUSD) || 0,
+        payment_method: paymentMethod || null,
+        transaction_id: String(transactionId || '').trim() || null,
+        plan_type: plan.plan_type,
+        duration_days: plan.duration_days,
+        status: 'pending',
+      });
+      if (orderErr) {
+        console.error('Order insert failed:', orderErr.message);
+      }
+    }
+
     const botToken = getBotToken() || process.env.TELEGRAM_BOT_TOKEN;
     const chatId = getAdminChatId() || process.env.TELEGRAM_CHAT_ID;
     const caption = buildCaption({
@@ -98,15 +186,20 @@ export async function POST(request) {
       paymentMethod,
       transactionId: String(transactionId || '').trim() || 'نینە',
       note: customerNote,
+      orderId,
     });
 
     const waDigits = toWhatsAppDigits(cleanPhone);
-    const waUrl = `https://wa.me/${waDigits}?text=${encodeURIComponent('سڵاو، داخوازییا تە گەهشت ژ IPBITS STORE')}`;
-    const replyMarkup = waDigits
-      ? {
-          inline_keyboard: [[{ text: '💬 واتساپ — پەیوەندی ب کڕیاری', url: waUrl }]],
-        }
-      : undefined;
+    const waUrl = waDigits
+      ? `https://wa.me/${waDigits}?text=${encodeURIComponent('سڵاو، داخوازییا تە گەهشت ژ IPBITS STORE')}`
+      : '';
+
+    const replyMarkup = buildConfirmOrderKeyboard({
+      orderId,
+      phone: waDigits || cleanPhone,
+      tier,
+      waUrl: waUrl || undefined,
+    });
 
     let telegramOk = false;
     if (botToken && chatId) {
@@ -122,6 +215,19 @@ export async function POST(request) {
         if (!tgRes.ok) {
           const errText = await tgRes.text().catch(() => '');
           console.error('Telegram dispatch failed:', tgRes.status, errText);
+        } else if (supabase) {
+          const tgJson = await tgRes.json().catch(() => ({}));
+          const msgId = tgJson?.result?.message_id;
+          if (msgId) {
+            await supabase
+              .from('orders')
+              .update({
+                telegram_chat_id: String(chatId),
+                telegram_message_id: msgId,
+                updated_at: new Date().toISOString(),
+              })
+              .eq('id', orderId);
+          }
         }
       } catch (tgErr) {
         console.error('Telegram Error:', tgErr);
@@ -143,6 +249,7 @@ export async function POST(request) {
           totalUSD: totalUSD || '',
           paymentMethod: paymentMethod || 'نەدیار',
           transactionId: transactionId || 'نینە',
+          orderId,
           image: image || null,
         }),
         redirect: 'follow',
@@ -155,6 +262,7 @@ export async function POST(request) {
       {
         success: true,
         telegramOk,
+        orderId,
         message: 'داخوازی ب سەرکەفتیانە گەهشت',
       },
       { status: 200 }
