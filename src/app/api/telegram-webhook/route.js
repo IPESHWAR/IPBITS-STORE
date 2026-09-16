@@ -1,19 +1,17 @@
 import { NextResponse } from 'next/server';
 import { generateBulkKeys } from '@/lib/bulkKeyGenerator';
-import { listBulkKeyTiers, resolveBulkKeyTier } from '@/lib/bulkKeyTiers';
+import { resolveBulkKeyTier } from '@/lib/bulkKeyTiers';
 import { getBotToken } from '@/lib/telegramApprove';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
 const MAX_GEN_COUNT = 5;
-const HELP_TEXT =
-  'Usage:\n' +
-  '<code>/gen Daily</code>\n' +
-  '<code>/gen Weekly 2</code>\n' +
-  '<code>/gen Monthly 5</code>\n\n' +
-  'Tiers: Daily, Weekly, Monthly, 3months, Yearly\n' +
-  'Count: 1–5 (default 1)';
+const READY_REPLY = 'سیستەمێ کلیلان یێ ئامادەیە.';
+
+function ok() {
+  return NextResponse.json({ ok: true }, { status: 200 });
+}
 
 function escapeHtml(value) {
   return String(value ?? '')
@@ -22,107 +20,93 @@ function escapeHtml(value) {
     .replace(/>/g, '&gt;');
 }
 
-function stripHtml(value) {
-  return String(value || '')
-    .replace(/<br\s*\/?>/gi, '\n')
-    .replace(/<\/p>/gi, '\n')
-    .replace(/<[^>]+>/g, '')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&amp;/g, '&')
-    .trim();
-}
-
-function formatExpiry(iso) {
-  if (!iso) return 'n/a';
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return String(iso);
-  return `${d.toISOString().replace('T', ' ').slice(0, 19)} UTC`;
-}
-
-/** Normalize env chat id: trim, strip quotes, optional leading @ */
-function normalizeChatIdEnv(raw) {
-  return String(raw ?? '')
+function configuredChatId() {
+  return String(process.env.TELEGRAM_CHAT_ID || '')
     .trim()
     .replace(/^['"]|['"]$/g, '')
     .trim();
 }
 
-function getConfiguredChatId() {
-  return normalizeChatIdEnv(
-    process.env.TELEGRAM_CHAT_ID || process.env.ADMIN_CHAT_ID || ''
-  );
-}
+/** Only the authorized TELEGRAM_CHAT_ID may run commands. */
+function isAuthorizedChat(message) {
+  const allowed = configuredChatId();
+  if (!allowed) {
+    console.error('[telegram-webhook] TELEGRAM_CHAT_ID is not set');
+    return false;
+  }
 
-/**
- * Authorize by TELEGRAM_CHAT_ID against chat.id and/or from.id
- * (private chats: chat.id === user id).
- */
-function isAuthorizedGenSender(message) {
-  const configured = getConfiguredChatId();
-  const chat = message?.chat || {};
-  const chatId = chat.id;
+  const chatId = message?.chat?.id;
   const fromId = message?.from?.id;
 
-  if (!configured) {
-    console.error('[telegram-webhook] TELEGRAM_CHAT_ID is missing — rejecting /gen');
-    return { ok: false, reason: 'missing_env_chat_id', chatId, fromId, configured: '' };
+  if (chatId != null && String(chatId) === String(allowed)) return true;
+  if (fromId != null && String(fromId) === String(allowed)) return true;
+
+  // Optional @username in env
+  const bare = allowed.replace(/^@/, '');
+  if (bare && !/^-?\d+$/.test(bare)) {
+    const chatUser = message?.chat?.username
+      ? String(message.chat.username).replace(/^@/, '')
+      : '';
+    const fromUser = message?.from?.username
+      ? String(message.from.username).replace(/^@/, '')
+      : '';
+    if (
+      (chatUser && chatUser.toLowerCase() === bare.toLowerCase()) ||
+      (fromUser && fromUser.toLowerCase() === bare.toLowerCase())
+    ) {
+      return true;
+    }
   }
 
-  const configuredBare = configured.replace(/^@/, '');
-  const chatIdStr = String(chatId ?? '');
-  const fromIdStr = fromId == null ? '' : String(fromId);
+  return false;
+}
 
-  if (chatIdStr && chatIdStr === String(configured)) {
-    return { ok: true, chatId, fromId, configured };
-  }
-  if (fromIdStr && fromIdStr === String(configured)) {
-    return { ok: true, chatId, fromId, configured };
-  }
+async function sendMessage(chatId, text, { html = true } = {}) {
+  const botToken = getBotToken();
+  if (!botToken || chatId == null) return;
 
-  // Username match (env like @ipeshwar or ipeshwar)
-  const chatUser = chat.username ? String(chat.username).replace(/^@/, '') : '';
-  const fromUser = message?.from?.username
-    ? String(message.from.username).replace(/^@/, '')
-    : '';
-  if (
-    configuredBare &&
-    !/^-?\d+$/.test(configuredBare) &&
-    ((chatUser && chatUser.toLowerCase() === configuredBare.toLowerCase()) ||
-      (fromUser && fromUser.toLowerCase() === configuredBare.toLowerCase()))
-  ) {
-    return { ok: true, chatId, fromId, configured };
-  }
+  const body = {
+    chat_id: chatId,
+    text,
+    disable_web_page_preview: true,
+  };
+  if (html) body.parse_mode = 'HTML';
 
-  console.warn('[telegram-webhook] unauthorized /gen attempt', {
-    chatId: chatIdStr,
-    fromId: fromIdStr,
-    chatUsername: chatUser || null,
-    fromUsername: fromUser || null,
-    configured,
-    match: `${chatIdStr} === ${configured} ? ${chatIdStr === String(configured)}`,
+  const res = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  }).catch((err) => {
+    console.error('[telegram-webhook] sendMessage network error:', err?.message || err);
+    return null;
   });
 
-  return {
-    ok: false,
-    reason: 'chat_id_mismatch',
-    chatId: chatIdStr,
-    fromId: fromIdStr,
-    configured,
-  };
+  if (!res) return;
+  const json = await res.json().catch(() => ({}));
+  if (!json.ok) {
+    console.error('[telegram-webhook] sendMessage failed:', json.description || json);
+    // Retry without HTML if parse failed
+    if (html) {
+      await sendMessage(
+        chatId,
+        String(text).replace(/<[^>]+>/g, ''),
+        { html: false }
+      );
+    }
+  }
 }
 
 /**
- * Case-insensitive /gen parser. Collapses extra whitespace.
- * Accepts: /gen daily, /gen Daily, /gen@Bot DAILY 2, etc.
+ * Parse `/gen daily`, `/gen Daily 2`, `/gen@Bot monthly`, etc.
+ * Case-insensitive; collapses extra spaces.
  */
 function parseGenCommand(text) {
-  const raw = String(text || '')
+  const normalized = String(text || '')
     .replace(/\u00a0/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
 
-  const match = raw.match(/^\/gen(?:@[A-Za-z0-9_]+)?(?:\s+(.*))?$/i);
+  const match = normalized.match(/^\/gen(?:@[A-Za-z0-9_]+)?(?:\s+(.*))?$/i);
   if (!match) return null;
 
   const args = String(match[1] || '')
@@ -131,289 +115,161 @@ function parseGenCommand(text) {
     .filter(Boolean);
 
   if (!args.length) {
-    return { ok: false, error: 'missing_tier', help: true };
+    return { ok: false, error: 'missing_tier' };
   }
 
-  const tierRaw = args[0];
-  const countRaw = args[1] ?? '1';
-  const count = Number.parseInt(String(countRaw).trim(), 10);
-
-  if (!Number.isFinite(count) || count < 1) {
-    return { ok: false, error: 'invalid_count', countRaw };
-  }
-
-  const tier = resolveBulkKeyTier(tierRaw);
+  const tier = resolveBulkKeyTier(args[0]);
   if (!tier) {
-    return { ok: false, error: 'invalid_tier', tierRaw };
+    return { ok: false, error: 'invalid_tier', tierRaw: args[0] };
+  }
+
+  const count = args[1] ? Number.parseInt(args[1], 10) : 1;
+  if (!Number.isFinite(count) || count < 1) {
+    return { ok: false, error: 'invalid_count' };
   }
 
   return {
     ok: true,
     tier,
-    count: Math.min(MAX_GEN_COUNT, Math.max(1, count)),
+    count: Math.min(MAX_GEN_COUNT, count),
   };
 }
 
-async function sendTelegramMessage(chatId, htmlText, extra = {}) {
-  const botToken = getBotToken();
-  if (!botToken || chatId == null) {
-    console.error('[telegram-webhook] sendMessage skipped — missing bot token or chatId', {
-      hasToken: Boolean(botToken),
-      chatId,
-    });
-    return { ok: false };
-  }
-
-  const payloadBase = {
-    chat_id: chatId,
-    disable_web_page_preview: true,
-    ...extra,
-  };
-
-  // Prefer HTML; fall back to plain text if Telegram rejects parse_mode
-  const htmlRes = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      ...payloadBase,
-      text: htmlText,
-      parse_mode: 'HTML',
-    }),
-  }).catch((err) => {
-    console.error('[telegram-webhook] sendMessage network error:', err?.message || err);
-    return null;
-  });
-
-  if (!htmlRes) return { ok: false };
-
-  const htmlJson = await htmlRes.json().catch(() => ({}));
-  if (htmlJson.ok) return { ok: true, json: htmlJson };
-
-  console.error('[telegram-webhook] HTML sendMessage failed, retrying plain text:', {
-    description: htmlJson.description,
-    error_code: htmlJson.error_code,
-    chatId: String(chatId),
-  });
-
-  const plain = stripHtml(htmlText);
-  const plainRes = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      ...payloadBase,
-      text: plain,
-    }),
-  }).catch((err) => {
-    console.error('[telegram-webhook] plain sendMessage network error:', err?.message || err);
-    return null;
-  });
-
-  if (!plainRes) return { ok: false };
-  const plainJson = await plainRes.json().catch(() => ({}));
-  if (!plainJson.ok) {
-    console.error('[telegram-webhook] plain sendMessage also failed:', plainJson);
-  }
-  return { ok: !!plainJson.ok, json: plainJson };
+function isStartOrTest(text) {
+  const t = String(text || '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (/^\/start(?:@[A-Za-z0-9_]+)?$/i.test(t)) return true;
+  if (/^test$/i.test(t)) return true;
+  return false;
 }
 
-function buildSuccessMessage(result) {
+function formatKeysReply(result) {
   const tier = result.tier;
   const items = result.items || [];
   const lines = [
-    `✅ <b>Generated ${items.length}× ${escapeHtml(tier.label)}</b>`,
-    `💵 ${Number(tier.amount_iqd).toLocaleString()} IQD · $${tier.limit_usd} limit`,
+    `✅ <b>${items.length}× ${escapeHtml(tier.label)}</b>`,
+    `💵 ${Number(tier.amount_iqd).toLocaleString()} IQD · $${tier.limit_usd}`,
     '',
   ];
 
   for (const item of items) {
-    const expiry = formatExpiry(item.openrouter?.expires_at);
     lines.push(`<code>${escapeHtml(item.code)}</code>`);
-    lines.push(`⏱ Expires: ${escapeHtml(expiry)} · ${tier.days} day(s)`);
+    const expires = item.openrouter?.expires_at
+      ? new Date(item.openrouter.expires_at).toISOString().slice(0, 10)
+      : `${tier.days}d`;
+    lines.push(`⏱ ${escapeHtml(expires)}`);
     lines.push('');
-  }
-
-  if (result.failures?.length) {
-    lines.push(`⚠️ Failed: ${result.failures.length}`);
   }
 
   return lines.join('\n').trim();
 }
 
-async function handleGenMessage(message) {
-  const botToken = getBotToken();
-  if (!botToken) {
-    console.error('[telegram-webhook] TELEGRAM_BOT_TOKEN missing');
-    return NextResponse.json({ ok: false, error: 'bot_token_missing' }, { status: 500 });
-  }
-
-  const auth = isAuthorizedGenSender(message);
+async function handleAuthorizedText(message) {
   const chatId = message.chat?.id;
+  const text = message.text || '';
 
-  if (!auth.ok) {
-    // Clear server log + reply with caller's chatId (so you can fix TELEGRAM_CHAT_ID)
-    console.error('[telegram-webhook] unauthorized', auth);
-    if (chatId != null) {
-      await sendTelegramMessage(
-        chatId,
-        `❌ Unauthorized\n` +
-          `Your chatId: <code>${escapeHtml(auth.chatId)}</code>\n` +
-          `from.id: <code>${escapeHtml(auth.fromId || 'n/a')}</code>\n` +
-          `Set <code>TELEGRAM_CHAT_ID</code> to one of these values.`
-      );
-    }
-    return NextResponse.json({
-      ok: true,
-      ignored: true,
-      reason: auth.reason,
-      chatId: auth.chatId,
-    });
+  if (isStartOrTest(text)) {
+    await sendMessage(chatId, READY_REPLY, { html: false });
+    return;
   }
 
-  const allowedUser = normalizeChatIdEnv(process.env.TELEGRAM_ADMIN_USER_ID || '');
-  if (allowedUser && message.from?.id != null && String(message.from.id) !== String(allowedUser)) {
-    console.warn('[telegram-webhook] TELEGRAM_ADMIN_USER_ID mismatch', {
-      fromId: String(message.from.id),
-      allowedUser,
-    });
-    await sendTelegramMessage(
-      chatId,
-      `❌ Unauthorized user\nfrom.id: <code>${escapeHtml(message.from.id)}</code>`
-    );
-    return NextResponse.json({ ok: true, ignored: true, reason: 'admin_user_mismatch' });
-  }
-
-  const parsed = parseGenCommand(message.text);
+  const parsed = parseGenCommand(text);
   if (!parsed) {
-    return NextResponse.json({ ok: true });
+    // Not a handled command — ignore quietly
+    return;
   }
-
-  console.log('[telegram-webhook] /gen command', {
-    text: message.text,
-    tier: parsed.ok ? parsed.tier.id : parsed.tierRaw || parsed.error,
-    count: parsed.ok ? parsed.count : null,
-    chatId: String(chatId),
-  });
 
   if (!parsed.ok) {
-    const tiers = listBulkKeyTiers()
-      .map((t) => escapeHtml(t.id === 'test' ? 'Daily' : t.id))
-      .join(', ');
-    await sendTelegramMessage(
+    await sendMessage(
       chatId,
-      parsed.help
-        ? HELP_TEXT
-        : `❌ ${escapeHtml(parsed.error)}${
-            parsed.tierRaw ? ` (${escapeHtml(parsed.tierRaw)})` : ''
-          }\n\nAvailable: ${tiers}\n\n${HELP_TEXT}`,
-      { reply_to_message_id: message.message_id }
+      `❌ ${escapeHtml(parsed.error)}\n` +
+        `Usage: <code>/gen daily</code> · <code>/gen monthly 2</code>\n` +
+        `Tiers: daily, weekly, monthly, 3months, yearly (max ${MAX_GEN_COUNT})`
     );
-    return NextResponse.json({ ok: true });
+    return;
   }
 
-  const pending = await sendTelegramMessage(
+  await sendMessage(
     chatId,
-    `⏳ Generating <b>${parsed.count}× ${escapeHtml(parsed.tier.label)}</b>…`,
-    { reply_to_message_id: message.message_id }
+    `⏳ Generating <b>${parsed.count}× ${escapeHtml(parsed.tier.label)}</b>…`
   );
-  if (!pending.ok) {
-    console.error('[telegram-webhook] failed to send pending status message');
-  }
 
-  let result;
   try {
-    result = await generateBulkKeys({
+    // Same OpenRouter + Supabase voucher path as admin / generate-bulk-keys flow
+    const result = await generateBulkKeys({
       tier: parsed.tier.id,
       quantity: parsed.count,
       provisionOpenRouter: true,
     });
+
+    if (!result.ok || !result.created) {
+      const detail =
+        result.error ||
+        result.failures?.[0]?.error ||
+        result.code ||
+        'generation_failed';
+      console.error('[telegram-webhook] generation failed:', detail, result.failures);
+      await sendMessage(chatId, `❌ Failed\n<code>${escapeHtml(detail)}</code>`);
+      return;
+    }
+
+    await sendMessage(chatId, formatKeysReply(result));
   } catch (err) {
-    console.error('[telegram-webhook] generateBulkKeys threw:', err);
-    await sendTelegramMessage(
+    console.error('[telegram-webhook] generateBulkKeys error:', err);
+    await sendMessage(
       chatId,
-      `❌ Key generation error\n<code>${escapeHtml(err?.message || 'unknown')}</code>`,
-      { reply_to_message_id: message.message_id }
+      `❌ Error\n<code>${escapeHtml(err?.message || 'unknown')}</code>`
     );
-    return NextResponse.json({ ok: true, generated: 0 });
   }
-
-  if (!result.ok || !result.created) {
-    const detail =
-      result.error ||
-      result.failures?.[0]?.error ||
-      result.code ||
-      'generation_failed';
-    console.error('[telegram-webhook] generation failed:', {
-      detail,
-      failures: result.failures,
-    });
-    await sendTelegramMessage(
-      chatId,
-      `❌ Key generation failed\n<code>${escapeHtml(detail)}</code>`,
-      { reply_to_message_id: message.message_id }
-    );
-    return NextResponse.json({ ok: true, generated: 0 });
-  }
-
-  const sent = await sendTelegramMessage(chatId, buildSuccessMessage(result), {
-    reply_to_message_id: message.message_id,
-  });
-  if (!sent.ok) {
-    console.error('[telegram-webhook] failed to deliver success message with codes', result.codes);
-  }
-
-  return NextResponse.json({
-    ok: true,
-    generated: result.created,
-    codes: result.codes,
-  });
 }
 
 /**
- * Secure admin-only Telegram webhook for /gen voucher commands.
- * Also forwards callback_query updates to the existing approval webhook.
- *
- * POST /api/telegram-webhook
+ * Telegram webhook — /gen voucher keys for the authorized chat only.
+ * Checkout / order callbacks are forwarded to the existing approval webhook
+ * without modifying that route.
  */
 export async function POST(req) {
   try {
-    const botToken = getBotToken();
-    if (!botToken) {
-      return NextResponse.json({ ok: false, error: 'TELEGRAM_BOT_TOKEN missing' }, { status: 500 });
-    }
-
-    const configuredSecret = normalizeChatIdEnv(process.env.TELEGRAM_WEBHOOK_SECRET || '');
-    if (configuredSecret) {
-      const headerSecret = req.headers.get('x-telegram-bot-api-secret-token') || '';
-      if (headerSecret !== configuredSecret) {
-        console.warn('[telegram-webhook] secret_token mismatch');
-        return NextResponse.json({ ok: false, error: 'unauthorized' }, { status: 401 });
-      }
+    if (!getBotToken()) {
+      console.error('[telegram-webhook] TELEGRAM_BOT_TOKEN missing');
+      return ok();
     }
 
     const update = await req.json().catch(() => null);
-    if (!update) {
-      return NextResponse.json({ ok: false, error: 'invalid_body' }, { status: 400 });
-    }
+    if (!update) return ok();
 
+    // Preserve existing order / top-up approval callbacks (do not rewrite that logic)
     if (update.callback_query) {
-      const { POST: handleApprovalWebhook } = await import('@/app/api/telegram/webhook/route');
-      const forwarded = new Request(req.url, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(update),
-      });
-      return handleApprovalWebhook(forwarded);
+      try {
+        const { POST: handleApprovalWebhook } = await import(
+          '@/app/api/telegram/webhook/route'
+        );
+        const forwarded = new Request(req.url, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify(update),
+        });
+        await handleApprovalWebhook(forwarded);
+      } catch (err) {
+        console.error('[telegram-webhook] callback forward error:', err);
+      }
+      return ok();
     }
 
     const message = update.message || update.edited_message;
-    if (!message?.text) {
-      return NextResponse.json({ ok: true });
+    if (!message?.text) return ok();
+
+    // Unauthorized chats: ignore silently
+    if (!isAuthorizedChat(message)) {
+      return ok();
     }
 
-    return handleGenMessage(message);
+    await handleAuthorizedText(message);
+    return ok();
   } catch (error) {
     console.error('[telegram-webhook] unhandled error:', error);
-    return NextResponse.json({ ok: true });
+    return ok();
   }
 }
 
@@ -421,7 +277,6 @@ export async function GET() {
   return NextResponse.json({
     ok: true,
     endpoint: '/api/telegram-webhook',
-    commands: ['/gen Daily [1-5]', '/gen Weekly [1-5]', '/gen Monthly [1-5]'],
-    chatIdConfigured: Boolean(getConfiguredChatId()),
+    commands: ['/start', 'test', '/gen daily', '/gen monthly [1-5]'],
   });
 }
