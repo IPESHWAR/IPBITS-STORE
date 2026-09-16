@@ -106,6 +106,12 @@ export const FALLBACK_PAID_MODELS = [
   { id: 'google/gemini-2.0-flash-001', name: 'Gemini 2.0 Flash', tier: 'paid' },
   { id: 'google/gemini-pro-1.5', name: 'Gemini 1.5 Pro', tier: 'paid' },
   { id: 'deepseek/deepseek-chat', name: 'DeepSeek Chat', tier: 'paid' },
+  {
+    id: 'deepseek/deepseek-chat',
+    name: 'DeepSeek V3 (Coding & Chat)',
+    badge: 'Code / Ultra Fast',
+    context: '64k',
+  },
 ];
 
 /** @deprecated use FALLBACK_FREE_MODELS + FALLBACK_PAID_MODELS */
