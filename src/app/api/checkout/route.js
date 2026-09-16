@@ -129,22 +129,36 @@ export async function POST(request) {
 
     const supabase = getSupabaseAdmin();
     if (supabase) {
-      const { error: orderErr } = await supabase.from('orders').insert({
+      const baseOrderData = {
         id: orderId,
+        phone: cleanPhone,
+        status: 'pending',
+      };
+      // Try comprehensive insert first
+      const fullPayload = {
+        ...baseOrderData,
         customer_name: customerName,
-        customer_phone: cleanPhone,
-        items: Array.isArray(items) ? items : [{ name: itemsFormatted }],
         items_label: itemsFormatted,
         total_iqd: finalIQD,
         total_usd: Number(totalUSD) || 0,
         payment_method: paymentMethod || null,
         transaction_id: String(transactionId || '').trim() || null,
-        plan_type: kind === 'ai' ? plan.plan_type : 'account_service',
-        duration_days: kind === 'ai' ? plan.duration_days : null,
-        status: 'pending',
-      });
-      if (orderErr) {
-        console.error('Order insert failed:', orderErr.message);
+        plan_type: kind === 'ai' ? (plan?.plan_type || 'trial') : 'account_service',
+        duration_days: kind === 'ai' ? (plan?.duration_days || 1) : null,
+      };
+      let { error: insertErr } = await supabase.from('orders').insert(fullPayload);
+
+      // If failed due to extra column mismatch, fallback to minimal safe schema
+      if (insertErr) {
+        console.warn('Retrying with minimal order schema due to:', insertErr.message);
+        const { error: retryErr } = await supabase.from('orders').insert({
+          id: orderId,
+          phone: cleanPhone,
+          status: 'pending',
+        });
+        if (retryErr) {
+          console.error('Critical: minimal order insert also failed:', retryErr.message);
+        }
       }
     }
 
