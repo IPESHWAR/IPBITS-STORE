@@ -49,7 +49,7 @@ async function dispatchTelegram({ botToken, chatId, caption, image, orderId }) {
       [
         {
           text: '✅ پەسەندکرن (Confirm)',
-          callback_data: `approve:${orderId}`,
+          callback_data: `approve_order:${orderId}`,
         },
       ],
     ],

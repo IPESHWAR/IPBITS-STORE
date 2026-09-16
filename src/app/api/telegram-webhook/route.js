@@ -491,9 +491,16 @@ export async function POST(req) {
         await handleConfirmAcc(cq);
         return okResponse();
       }
+      // Legacy AI path only: approve_order:<phone|ref>:<tier>
+      // Checkout / keyboard order approval: approve_order:<orderId> or approve:<orderId>
       if (data.startsWith('approve_order:')) {
-        await handleApproveOrderCallback(cq);
-        return okResponse();
+        const rest = data.slice('approve_order:'.length);
+        const segs = rest.split(':').filter(Boolean);
+        if (segs.length >= 2) {
+          await handleApproveOrderCallback(cq);
+          return okResponse();
+        }
+        // Single-segment orderId → fall through to approval webhook
       }
 
       try {

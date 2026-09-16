@@ -30,12 +30,13 @@ export async function POST(req) {
       return NextResponse.json({ ok: true });
     }
 
-    if (
-      !data.startsWith('approve_order:') &&
-      !data.startsWith('reject_order:') &&
-      !data.startsWith('approve_topup:') &&
-      !data.startsWith('reject_topup:')
-    ) {
+    const isApproveOrder =
+      data.startsWith('approve_order:') || data.startsWith('approve:');
+    const isRejectOrder = data.startsWith('reject_order:');
+    const isApproveTopup = data.startsWith('approve_topup:');
+    const isRejectTopup = data.startsWith('reject_topup:');
+
+    if (!isApproveOrder && !isRejectOrder && !isApproveTopup && !isRejectTopup) {
       await answerCallbackQuery(cq.id, 'Unknown action', true);
       return NextResponse.json({ ok: true });
     }
@@ -45,7 +46,7 @@ export async function POST(req) {
       return NextResponse.json({ ok: true });
     }
 
-    if (data.startsWith('approve_topup:')) {
+    if (isApproveTopup) {
       const topupId = data.slice('approve_topup:'.length).trim();
       const result = await approveTopup(topupId);
       if (!result.ok) {
@@ -66,7 +67,7 @@ export async function POST(req) {
       return NextResponse.json({ ok: true });
     }
 
-    if (data.startsWith('reject_topup:')) {
+    if (isRejectTopup) {
       const topupId = data.slice('reject_topup:'.length).trim();
       await rejectTopup(topupId);
       await answerCallbackQuery(cq.id, '❌ هاتە ڕەتکرن', true);
@@ -79,8 +80,10 @@ export async function POST(req) {
       return NextResponse.json({ ok: true });
     }
 
-    if (data.startsWith('approve_order:')) {
-      const orderId = data.slice('approve_order:'.length).trim();
+    if (isApproveOrder) {
+      const orderId = data.startsWith('approve_order:')
+        ? data.slice('approve_order:'.length).trim()
+        : data.slice('approve:'.length).trim();
       await handleApprove({
         orderId,
         chatId,
