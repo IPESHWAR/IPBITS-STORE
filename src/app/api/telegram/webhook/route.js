@@ -90,6 +90,7 @@ export async function POST(req) {
         messageId,
         hasPhoto,
         callbackId: cq.id,
+        messageText: cq.message?.text || cq.message?.caption || '',
       });
       return NextResponse.json({ ok: true });
     }
@@ -101,6 +102,7 @@ export async function POST(req) {
       messageId,
       hasPhoto,
       callbackId: cq.id,
+      messageText: cq.message?.text || cq.message?.caption || '',
     });
     return NextResponse.json({ ok: true });
   } catch (error) {
@@ -109,30 +111,63 @@ export async function POST(req) {
   }
 }
 
-async function handleApprove({ orderId, chatId, messageId, hasPhoto, callbackId }) {
-  const { data: order, error } = await supabaseAdmin
+/** Pull customer fields from the original Telegram order caption when DB row is missing. */
+function parseOrderFromCaption(text) {
+  const raw = String(text || '');
+  const nameMatch = raw.match(/👤\s*کڕیار:\s*(.+)/);
+  const phoneMatch = raw.match(/📞\s*واتساپ:\s*(.+)/);
+  const kindMatch = raw.match(/🏷\s*جۆر:\s*(.+)/);
+  const name = String(nameMatch?.[1] || '').trim();
+  const phone = String(phoneMatch?.[1] || '').trim();
+  const kind = String(kindMatch?.[1] || '').trim();
+  return {
+    name: name && name !== 'نەدیار' ? name : '',
+    phone: phone && phone !== 'نینە' ? phone : '',
+    planType: /AI Hub/i.test(kind) ? 'trial' : 'account_service',
+  };
+}
+
+function orderPhone(order) {
+  return order?.customer_phone || order?.phone || '';
+}
+
+function orderName(order) {
+  return order?.customer_name || order?.name || '';
+}
+
+async function handleApprove({
+  orderId,
+  chatId,
+  messageId,
+  hasPhoto,
+  callbackId,
+  messageText,
+}) {
+  const { data: order } = await supabaseAdmin
     .from('orders')
     .select('*')
     .eq('id', orderId)
-    .single();
+    .maybeSingle();
 
-  if (error || !order) {
-    await answerCallbackQuery(callbackId, '❌ Order not found', true);
-    return;
-  }
+  const parsed = parseOrderFromCaption(messageText);
+  const name = orderName(order) || parsed.name || '—';
+  const phone = orderPhone(order) || parsed.phone || '';
+  const planType = order?.plan_type || parsed.planType || 'trial';
+  const durationDays = order?.duration_days ?? null;
+  const items = order?.items || [];
 
-  if (order.status === 'approved' && order.license_key) {
+  if (order?.status === 'approved' && order.license_key) {
     await answerCallbackQuery(callbackId, 'ئۆردەر چالاک بوویە ✅', true);
     await editTelegramMessage({
       chatId,
       messageId,
-      text: approvedMessage(order.license_key, order.customer_name, order.customer_phone),
+      text: approvedMessage(order.license_key, name, phone),
       isCaption: hasPhoto,
     });
     return;
   }
 
-  if (order.status === 'rejected') {
+  if (order?.status === 'rejected') {
     await answerCallbackQuery(callbackId, '❌ Already rejected', true);
     return;
   }
@@ -140,12 +175,12 @@ async function handleApprove({ orderId, chatId, messageId, hasPhoto, callbackId 
   let license;
   try {
     license = await generateLicenseForOrder({
-      orderId: order.id,
-      phone: order.customer_phone,
-      name: order.customer_name,
-      planType: order.plan_type,
-      durationDays: order.duration_days,
-      items: order.items || [],
+      orderId: orderId || order?.id,
+      phone,
+      name,
+      planType,
+      durationDays,
+      items,
     });
   } catch (err) {
     console.error('Key gen on approve failed:', err);
@@ -153,31 +188,49 @@ async function handleApprove({ orderId, chatId, messageId, hasPhoto, callbackId 
     return;
   }
 
-  const { error: updErr } = await supabaseAdmin
-    .from('orders')
-    .update({
-      status: 'approved',
-      license_key: license.key_code,
-      license_key_id: license.id || null,
-      updated_at: new Date().toISOString(),
-    })
-    .eq('id', orderId);
-
-  if (updErr) {
-    // Fallback if license_key_id column does not exist yet
-    const { error: fallbackErr } = await supabaseAdmin
+  if (order?.id) {
+    const { error: updErr } = await supabaseAdmin
       .from('orders')
       .update({
         status: 'approved',
         license_key: license.key_code,
+        license_key_id: license.id || null,
         updated_at: new Date().toISOString(),
       })
       .eq('id', orderId);
 
-    if (fallbackErr) {
-      console.error('Order approve update failed:', fallbackErr);
-      await answerCallbackQuery(callbackId, '❌ DB update failed', true);
-      return;
+    if (updErr) {
+      // Fallback if license_key_id column does not exist yet
+      const { error: fallbackErr } = await supabaseAdmin
+        .from('orders')
+        .update({
+          status: 'approved',
+          license_key: license.key_code,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', orderId);
+
+      if (fallbackErr) {
+        console.error('Order approve update failed:', fallbackErr);
+      }
+    }
+  } else {
+    // Order row missing — still fulfill; try a best-effort upsert so later lookups work
+    const { error: upsertErr } = await supabaseAdmin.from('orders').upsert(
+      {
+        id: orderId,
+        phone: phone || null,
+        customer_name: name !== '—' ? name : null,
+        customer_phone: phone || null,
+        status: 'approved',
+        license_key: license.key_code,
+        plan_type: planType,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: 'id' }
+    );
+    if (upsertErr) {
+      console.warn('Approve upsert skipped:', upsertErr.message);
     }
   }
 
@@ -185,7 +238,7 @@ async function handleApprove({ orderId, chatId, messageId, hasPhoto, callbackId 
   await editTelegramMessage({
     chatId,
     messageId,
-    text: approvedMessage(license.key_code, order.customer_name, order.customer_phone),
+    text: approvedMessage(license.key_code, name, phone),
     isCaption: hasPhoto,
   });
 }
@@ -194,31 +247,39 @@ function approvedMessage(keyCode, name, phone) {
   return (
     `✅ ئۆردەر هاتە پەسەندکرن ب سەرکەفتیانە!\n` +
     `🔑 کلیلا دروستکری: \`${keyCode}\`\n` +
-    `👤 بۆ: ${name} (${phone})`
+    `👤 بۆ: ${name} (${phone || '—'})`
   );
 }
 
-async function handleReject({ orderId, chatId, messageId, hasPhoto, callbackId }) {
-  const { data: order, error } = await supabaseAdmin
+async function handleReject({
+  orderId,
+  chatId,
+  messageId,
+  hasPhoto,
+  callbackId,
+  messageText,
+}) {
+  const { data: order } = await supabaseAdmin
     .from('orders')
     .select('*')
     .eq('id', orderId)
-    .single();
+    .maybeSingle();
 
-  if (error || !order) {
-    await answerCallbackQuery(callbackId, '❌ Order not found', true);
-    return;
-  }
+  const parsed = parseOrderFromCaption(messageText);
+  const name = orderName(order) || parsed.name || '—';
+  const phone = orderPhone(order) || parsed.phone || '—';
 
-  if (order.status === 'approved') {
+  if (order?.status === 'approved') {
     await answerCallbackQuery(callbackId, '❌ Already approved', true);
     return;
   }
 
-  await supabaseAdmin
-    .from('orders')
-    .update({ status: 'rejected', updated_at: new Date().toISOString() })
-    .eq('id', orderId);
+  if (order?.id) {
+    await supabaseAdmin
+      .from('orders')
+      .update({ status: 'rejected', updated_at: new Date().toISOString() })
+      .eq('id', orderId);
+  }
 
   await answerCallbackQuery(callbackId, '❌ هاتە ڕەتکرن', true);
   await editTelegramMessage({
@@ -227,7 +288,7 @@ async function handleReject({ orderId, chatId, messageId, hasPhoto, callbackId }
     text:
       `❌ ئۆردەر هاتە ڕەتکرن\n` +
       `🆔 \`${orderId}\`\n` +
-      `👤 ${order.customer_name} (${order.customer_phone})`,
+      `👤 ${name} (${phone})`,
     isCaption: hasPhoto,
   });
 }
