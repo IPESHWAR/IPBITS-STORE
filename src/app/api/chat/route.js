@@ -413,7 +413,7 @@ export async function POST(req) {
   try {
     const body = await req.json();
     const { messages, model, userEmail } = body || {};
-    const selectedModel = String(model || 'openai/gpt-4o-mini').trim();
+    const selectedModel = String(model || 'google/gemini-2.5-flash').trim();
     const imageModel = isImageGenerationModel(selectedModel);
     const promptText = extractPromptText(messages);
     const intent = detectChatIntent({
@@ -568,12 +568,8 @@ export async function POST(req) {
       });
     }
 
-    // Streaming text path (auto free→paid slug fallback)
-    let chatModel = selectedModel;
-    if (isImageGenerationModel(selectedModel)) {
-      chatModel =
-        process.env.OPENROUTER_HELP_MODEL || 'meta-llama/llama-3.2-3b-instruct:free';
-    }
+    // Streaming text path — always use the client's selected model id (no llama hardcode)
+    const chatModel = String(selectedModel || 'google/gemini-2.5-flash').trim();
 
     const systemPrompt =
       imageModel || intent.kind === 'text_help'

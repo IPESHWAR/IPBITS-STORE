@@ -445,11 +445,12 @@ export default function ChatPage() {
 
         const preferred = data?.defaultModel || FALLBACK_DEFAULT;
         const all = [...frees, ...paids, ...images];
-        if (all.some((m) => m.id === preferred)) {
-          setModel(preferred);
-        } else if (frees[0]?.id) {
-          setModel(frees[0].id);
-        }
+        setModel((prev) => {
+          // Keep the user's current selection if it still exists in the catalog
+          if (prev && all.some((m) => m.id === prev)) return prev;
+          if (all.some((m) => m.id === preferred)) return preferred;
+          return frees[0]?.id || preferred;
+        });
       })
       .catch((err) => {
         console.error('Error fetching models:', err);
@@ -457,7 +458,7 @@ export default function ChatPage() {
           setFreeModels(FALLBACK_FREE_MODELS);
           setPaidModels(FALLBACK_PAID_MODELS);
           setImageModels(FALLBACK_IMAGE_MODELS);
-          setModel(FALLBACK_DEFAULT);
+          setModel((prev) => prev || FALLBACK_DEFAULT);
         }
       })
       .finally(() => {
@@ -623,7 +624,7 @@ export default function ChatPage() {
 
     const userText = input.trim();
     const currentAttachment = attachment;
-    const selectedModel = model || FALLBACK_DEFAULT;
+    const selectedModelId = String(model || '').trim() || FALLBACK_DEFAULT;
 
     const displayAttachment = currentAttachment
       ? {
@@ -662,7 +663,8 @@ export default function ChatPage() {
       role: 'assistant',
       content: '',
       streaming: true,
-      modelUsed: selectedModel,
+      model: selectedModelId,
+      modelUsed: selectedModelId,
     };
     const newMessages = [...messages, userMsg];
     setMessages([...newMessages, assistantPlaceholder]);
@@ -696,7 +698,8 @@ export default function ChatPage() {
         headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
         body: JSON.stringify({
           messages: apiMessages,
-          model: selectedModel,
+          // Exact dropdown selection — never hardcode a different model here
+          model: selectedModelId,
           userEmail: license?.customer_email || license?.customer_phone || null,
         }),
       });
@@ -738,13 +741,26 @@ export default function ChatPage() {
       if (contentType.includes('text/event-stream') && res.body) {
         let gotFirstToken = false;
         await readIpbitsChatSse(res, {
+          onMeta: (meta) => {
+            if (!meta?.model) return;
+            setMessages((prev) => {
+              const next = [...prev];
+              const last = next[next.length - 1];
+              if (last?.role === 'assistant') {
+                next[next.length - 1] = {
+                  ...last,
+                  model: meta.model,
+                  modelUsed: meta.model,
+                };
+              }
+              return next;
+            });
+          },
           onDelta: (full) => {
             if (!gotFirstToken && full) {
               gotFirstToken = true;
-              // Hide global typing once tokens flow; bubble shows live text
               setLoading(false);
             }
-            // Schedule update off the critical path when possible
             const paint = () => {
               setMessages((prev) => {
                 const next = [...prev];
@@ -754,7 +770,8 @@ export default function ChatPage() {
                     ...last,
                     content: full,
                     streaming: true,
-                    modelUsed: last.modelUsed || selectedModel,
+                    model: last.model || selectedModelId,
+                    modelUsed: last.modelUsed || selectedModelId,
                   };
                 }
                 return next;
@@ -767,6 +784,7 @@ export default function ChatPage() {
             }
           },
           onDone: (meta) => {
+            const actualModel = meta?.model || selectedModelId;
             setMessages((prev) => {
               const next = [...prev];
               const last = next[next.length - 1];
@@ -776,7 +794,8 @@ export default function ChatPage() {
                   content: meta?.reply || last.content || '',
                   streaming: false,
                   pointsSpent: Math.max(0, Math.round(Number(meta?.points_spent) || 0)),
-                  modelUsed: meta?.model || last.modelUsed || selectedModel,
+                  model: actualModel,
+                  modelUsed: actualModel,
                 };
               }
               return next;
@@ -792,6 +811,8 @@ export default function ChatPage() {
                   role: 'assistant',
                   content: (c.errorPrefix || '') + (errMsg || c.errorDefault || 'Error'),
                   streaming: false,
+                  model: last.model || selectedModelId,
+                  modelUsed: last.modelUsed || selectedModelId,
                 };
               }
               return next;
@@ -804,6 +825,7 @@ export default function ChatPage() {
         if (res.ok && (data.reply || data.choices?.[0]?.message?.content)) {
           const replyText = data.reply || data.choices[0].message.content;
           const spent = Math.max(0, Math.round(Number(data.points_spent) || 0));
+          const actualModel = data.model || selectedModelId;
           setMessages((prev) => {
             const next = [...prev];
             const last = next[next.length - 1];
@@ -812,7 +834,8 @@ export default function ChatPage() {
                 role: 'assistant',
                 content: replyText,
                 pointsSpent: spent,
-                modelUsed: data.model || selectedModel,
+                model: actualModel,
+                modelUsed: actualModel,
                 streaming: false,
               };
             }
@@ -972,11 +995,15 @@ export default function ChatPage() {
               ) : null}
 
               {/* نیشاندانا مۆدێل و خاڵێن مەسرەفبووی بۆ کڕیاری */}
-              {m.role === 'assistant' && (m.pointsSpent !== undefined || m.modelUsed) && (
+              {m.role === 'assistant' &&
+                (m.pointsSpent !== undefined || m.model || m.modelUsed) && (
                 <div className="mt-2.5 pt-2 border-t border-white/[0.06] flex items-center gap-2 text-[10px] text-white/40 select-none">
-                  {m.modelUsed && (
-                    <span className="truncate max-w-[10rem] font-mono text-white/50 bg-white/[0.04] px-1.5 py-0.5 rounded border border-white/[0.05]">
-                      {m.modelUsed.split('/').pop()?.replace(':free', '')}
+                  {(m.model || m.modelUsed) && (
+                    <span
+                      className="truncate max-w-[12rem] font-mono text-white/50 bg-white/[0.04] px-1.5 py-0.5 rounded border border-white/[0.05]"
+                      title={m.model || m.modelUsed}
+                    >
+                      {(m.model || m.modelUsed).split('/').pop()?.replace(':free', '')}
                     </span>
                   )}
                   <span className="inline-flex items-center gap-1 text-emerald-400/90 font-medium bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20">
