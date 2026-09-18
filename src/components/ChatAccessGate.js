@@ -5,31 +5,10 @@ import Link from 'next/link';
 import { KeyRound, Loader2, Lock } from 'lucide-react';
 import { useLanguage } from '@/components/LanguageProvider';
 import LanguageSwitcher from '@/components/LanguageSwitcher';
-
-async function unlockWithVoucher(rawKey) {
-  const next = String(rawKey || '').trim().toUpperCase();
-  if (!next) return { ok: false };
-
-  const res = await fetch('/api/vouchers/unlock', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ code: next, key: next }),
-  });
-  const data = await res.json().catch((err) => {
-    console.log('Unlock Error:', err);
-    return {};
-  });
-
-  if (!res.ok || !(data.ok || data.success) || !data.license) {
-    console.log('Unlock Error:', data.error || data.detail || data);
-    return { ok: false, error: data.error };
-  }
-
-  return { ok: true, license: data.license };
-}
+import { normalizeAccessKeyInput, unlockAccessKey } from '@/lib/unlockAccessKey';
 
 /**
- * Full-page voucher gate for /chat — blocks the hub until a valid unused voucher unlocks.
+ * Full-page access gate for /chat — unlocks with a Telegram license key or gift voucher.
  */
 export default function ChatAccessGate({ onUnlocked, initialKey = '' }) {
   const { t, dir, isRtl } = useLanguage();
@@ -45,14 +24,14 @@ export default function ChatAccessGate({ onUnlocked, initialKey = '' }) {
 
   const activate = async (e) => {
     e?.preventDefault?.();
-    const next = String(key || '').trim().toUpperCase();
+    const next = normalizeAccessKeyInput(key);
     if (!next || busy) return;
 
     setBusy(true);
     setError('');
 
     try {
-      const result = await unlockWithVoucher(next);
+      const result = await unlockAccessKey(next);
       if (!result.ok || !result.license) {
         setError(g.gateInvalidKey || '');
         setShake(true);
@@ -113,7 +92,7 @@ export default function ChatAccessGate({ onUnlocked, initialKey = '' }) {
               type="text"
               value={key}
               onChange={(e) => setKey(e.target.value.toUpperCase())}
-              placeholder={g.gateKeyPlaceholder || 'IPBITS-XXXX-XXXX'}
+              placeholder={g.gateKeyPlaceholder || 'IPBITS-1D-XXXXXXXX'}
               autoFocus
               autoComplete="off"
               spellCheck={false}

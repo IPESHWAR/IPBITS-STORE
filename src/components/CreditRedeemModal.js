@@ -4,31 +4,10 @@ import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { KeyRound, Loader2, Lock, X } from 'lucide-react';
 import { useLanguage } from '@/components/LanguageProvider';
-
-async function unlockWithVoucher(rawKey) {
-  const next = String(rawKey || '').trim().toUpperCase();
-  if (!next) return { ok: false };
-
-  const res = await fetch('/api/vouchers/unlock', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ code: next, key: next }),
-  });
-  const data = await res.json().catch((err) => {
-    console.log('Unlock Error:', err);
-    return {};
-  });
-
-  if (!res.ok || !(data.ok || data.success) || !data.license) {
-    console.log('Unlock Error:', data.error || data.detail || data);
-    return { ok: false, error: data.error };
-  }
-
-  return { ok: true, license: data.license };
-}
+import { normalizeAccessKeyInput, unlockAccessKey } from '@/lib/unlockAccessKey';
 
 /**
- * In-chat redeem / top-up gate when credits hit zero — uses vouchers table.
+ * In-chat redeem / top-up gate — accepts Telegram license keys or gift vouchers.
  */
 export default function CreditRedeemModal({
   open,
@@ -54,12 +33,12 @@ export default function CreditRedeemModal({
 
   const redeem = async (e) => {
     e?.preventDefault?.();
-    const next = String(key || '').trim().toUpperCase();
+    const next = normalizeAccessKeyInput(key);
     if (!next || busy) return;
     setBusy(true);
     setError('');
     try {
-      const result = await unlockWithVoucher(next);
+      const result = await unlockAccessKey(next);
       if (!result.ok || !result.license) {
         setError(g.gateInvalidKey || '');
         return;

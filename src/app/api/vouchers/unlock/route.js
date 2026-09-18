@@ -1,6 +1,11 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { listSubscriptionPlans, computePlanExpiresAt } from '@/config/plans';
+import {
+  activateLicenseKey,
+  isValidIpbitsLicenseFormat,
+  normalizeLicenseKeyInput,
+} from '@/lib/licenseService';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -26,7 +31,7 @@ function planFromAmountIqd(amountIqd) {
 }
 
 /**
- * Unlock AI Hub with a vouchers.code (NOT licenses).
+ * Unlock AI Hub with a vouchers.code, or with an IPBITS-* license key.
  * Body: { code | key }
  */
 export async function POST(req) {
@@ -41,7 +46,7 @@ export async function POST(req) {
     }
 
     const body = await req.json().catch(() => ({}));
-    const enteredCode = String(body.code || body.key || '').trim().toUpperCase();
+    const enteredCode = normalizeLicenseKeyInput(body.code || body.key || '');
 
     if (!enteredCode) {
       const error = { message: 'missing_code' };
@@ -50,6 +55,27 @@ export async function POST(req) {
         { ok: false, success: false, error: 'missing_code' },
         { status: 400 }
       );
+    }
+
+    // Telegram / AI Hub license keys live in licenses / license_keys — not vouchers.
+    if (enteredCode.startsWith('IPBITS-') || isValidIpbitsLicenseFormat(enteredCode)) {
+      const result = await activateLicenseKey({ keyCode: enteredCode });
+      if (!result.ok) {
+        return NextResponse.json(
+          {
+            ok: false,
+            success: false,
+            error: 'invalid_or_used',
+            code: result.code,
+          },
+          { status: 400 }
+        );
+      }
+      return NextResponse.json({
+        ok: true,
+        success: true,
+        license: result.license,
+      });
     }
 
     const { data: voucher, error } = await supabaseAdmin

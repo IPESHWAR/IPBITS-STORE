@@ -5,9 +5,61 @@ import {
   createAutomatedLicense,
   provisionOpenRouterKeyForLicense,
 } from '@/lib/openRouterProvisioning';
-import { resolveSubscriptionPlan, resolvePlanFromOrderContext } from '@/config/plans';
+import {
+  computePlanExpiresAt,
+  resolveSubscriptionPlan,
+  resolvePlanFromOrderContext,
+} from '@/config/plans';
+import { VIP_POINTS_PER_USD } from '@/lib/vipPoints';
 
 const MAX_RETRIES = 5;
+
+/** Dynamic duration prefixes: 1D / 7D / 30D / 90D / 365D (+ legacy aliases). */
+export const IPBITS_LICENSE_KEY_RE =
+  /^IPBITS-(1D|7D|30D|90D|365D|1Y|TST|WK|MO|3M|YR)-[A-Z0-9]{4,}$/i;
+
+export function normalizeLicenseKeyInput(raw) {
+  return String(raw || '')
+    .trim()
+    .toUpperCase()
+    .replace(/\s+/g, '');
+}
+
+export function isValidIpbitsLicenseFormat(raw) {
+  return IPBITS_LICENSE_KEY_RE.test(normalizeLicenseKeyInput(raw));
+}
+
+function enrichActivatedLicense(license, cleanKey) {
+  const plan = resolveSubscriptionPlan(
+    license.plan_type || license.package_type || license._planHint || 'monthly'
+  );
+  const durationDays =
+    Number(license.duration_days) || Number(plan.duration_days) || 1;
+  const limitUsd =
+    Number(license.credit_limit_usd ?? license.limit_usd) ||
+    Number(plan.credit_limit) ||
+    0;
+  const vipPoints = Math.round(limitUsd * VIP_POINTS_PER_USD);
+  let expiresAt = license.expires_at || null;
+  if (!expiresAt && durationDays > 0) {
+    expiresAt = computePlanExpiresAt(durationDays);
+  }
+
+  return {
+    key_code: String(license.key_code || license.license_code || cleanKey).toUpperCase(),
+    plan_type: license.plan_type || plan.plan_type || 'ai_hub',
+    duration_days: durationDays,
+    expires_at: expiresAt,
+    credits: durationDays,
+    credit_limit_usd: limitUsd,
+    limit_usd: limitUsd,
+    vip_points_total: vipPoints,
+    vip_points: vipPoints,
+    customer_phone: license.customer_phone || null,
+    customer_name: license.customer_name || null,
+    source: license._source || 'license',
+  };
+}
 
 /** Map any plan / storefront id → automated package type for OpenRouter provisioning. */
 export function toAutomatedPackageType(planType) {
@@ -157,20 +209,29 @@ export function generateLicenseForOrder({
 
 async function lookupLicensesTable(cleanKey) {
   const selects = [
+    'id, license_code, package_type, duration_days, expires_at, is_active, credit_limit_usd, customer_phone, customer_name',
     'id, license_code, package_type, duration_days, expires_at, is_active, credit_limit_usd',
     'id, license_code, key_code, package_type, duration_days, expires_at, is_active, credit_limit_usd',
   ];
 
   for (const columns of selects) {
-    let query = supabaseAdmin.from('licenses').select(columns).limit(1);
+    // Prefer exact eq after normalize (keys are stored uppercase).
+    let query = supabaseAdmin.from('licenses').select(columns).eq('license_code', cleanKey).limit(1);
+    let { data, error } = await query.maybeSingle();
 
-    if (columns.includes('key_code')) {
-      query = query.or(`license_code.ilike."${cleanKey}",key_code.ilike."${cleanKey}"`);
-    } else {
-      query = query.ilike('license_code', cleanKey);
+    if (error && /column|schema cache|does not exist|relation/i.test(error.message || '')) {
+      continue;
     }
 
-    const { data, error } = await query.maybeSingle();
+    // Fallback: case-insensitive match if eq miss (legacy mixed-case rows)
+    if (!data && !error) {
+      query = supabaseAdmin.from('licenses').select(columns).ilike('license_code', cleanKey).limit(1);
+      ({ data, error } = await query.maybeSingle());
+      if (error && /column|schema cache|does not exist|relation/i.test(error.message || '')) {
+        continue;
+      }
+    }
+
     if (error) {
       if (/column|schema cache|does not exist|relation/i.test(error.message || '')) continue;
       return null;
@@ -179,12 +240,73 @@ async function lookupLicensesTable(cleanKey) {
       return {
         key_code: data.license_code || data.key_code || cleanKey,
         plan_type: data.package_type || data.plan_type || 'ai_hub',
+        package_type: data.package_type || null,
         duration_days: data.duration_days,
         expires_at: data.expires_at,
+        credit_limit_usd: data.credit_limit_usd,
         customer_phone: data.customer_phone || null,
         customer_name: data.customer_name || null,
         is_active: data.is_active !== false,
         _source: 'licenses',
+      };
+    }
+  }
+  return null;
+}
+
+async function lookupLicenseKeysTable(cleanKey) {
+  const { data, error } = await supabaseAdmin
+    .from('license_keys')
+    .select('*')
+    .eq('key_code', cleanKey)
+    .maybeSingle();
+
+  if (!error && data) {
+    return { ...data, _source: 'license_keys' };
+  }
+
+  // Case-insensitive fallback
+  const { data: data2, error: error2 } = await supabaseAdmin
+    .from('license_keys')
+    .select('*')
+    .ilike('key_code', cleanKey)
+    .maybeSingle();
+
+  if (!error2 && data2) {
+    return { ...data2, _source: 'license_keys' };
+  }
+  return null;
+}
+
+async function lookupOrdersLicense(cleanKey) {
+  const selects = [
+    'id, license_key, plan_type, duration_days, customer_phone, customer_name, status, expires_at',
+    'id, license_key, plan_type, customer_phone, customer_name, status',
+  ];
+
+  for (const columns of selects) {
+    const { data, error } = await supabaseAdmin
+      .from('orders')
+      .select(columns)
+      .eq('license_key', cleanKey)
+      .limit(1)
+      .maybeSingle();
+
+    if (error) {
+      if (/column|schema cache|does not exist|relation/i.test(error.message || '')) continue;
+      return null;
+    }
+    if (data?.license_key) {
+      const plan = resolveSubscriptionPlan(data.plan_type);
+      return {
+        key_code: String(data.license_key).toUpperCase(),
+        plan_type: data.plan_type || plan.plan_type,
+        duration_days: data.duration_days || plan.duration_days,
+        expires_at: data.expires_at || null,
+        customer_phone: data.customer_phone || null,
+        customer_name: data.customer_name || null,
+        is_active: String(data.status || 'active').toLowerCase() !== 'cancelled',
+        _source: 'orders',
       };
     }
   }
@@ -196,9 +318,14 @@ export async function activateLicenseKey({ keyCode, phone }) {
     throw new Error('Supabase service role is not configured');
   }
 
-  const cleanKey = String(keyCode || '').trim().toUpperCase();
+  const cleanKey = normalizeLicenseKeyInput(keyCode);
   if (!cleanKey) {
     return { ok: false, code: 'missing_key' };
+  }
+
+  // Soft format check — still allow DB lookup for legacy shapes
+  if (cleanKey.startsWith('IPBITS-') && !isValidIpbitsLicenseFormat(cleanKey)) {
+    return { ok: false, code: 'invalid_key' };
   }
 
   // 1) Canonical `licenses` table (automated OpenRouter provisioning)
@@ -206,15 +333,12 @@ export async function activateLicenseKey({ keyCode, phone }) {
 
   // 2) Legacy `license_keys` (older order fulfillment codes)
   if (!license) {
-    const { data, error } = await supabaseAdmin
-      .from('license_keys')
-      .select('*')
-      .ilike('key_code', cleanKey)
-      .maybeSingle();
+    license = await lookupLicenseKeysTable(cleanKey);
+  }
 
-    if (!error && data) {
-      license = { ...data, _source: 'license_keys' };
-    }
+  // 3) Order row that already received a Telegram-issued key
+  if (!license) {
+    license = await lookupOrdersLicense(cleanKey);
   }
 
   if (!license) {
@@ -239,14 +363,7 @@ export async function activateLicenseKey({ keyCode, phone }) {
 
   return {
     ok: true,
-    license: {
-      key_code: String(license.key_code || cleanKey).toUpperCase(),
-      plan_type: license.plan_type,
-      duration_days: license.duration_days,
-      expires_at: license.expires_at,
-      customer_phone: license.customer_phone || null,
-      customer_name: license.customer_name || null,
-    },
+    license: enrichActivatedLicense(license, cleanKey),
   };
 }
 
