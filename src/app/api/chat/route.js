@@ -6,6 +6,39 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 const supabase = createClient(supabaseUrl, supabaseKey);
 
+/** Base system instructions for all text chat models (Gemini / Claude / OpenRouter). */
+const TEXT_ONLY_SYSTEM_PROMPT = `You are a text-only language model and CANNOT directly generate, draw, render, or attach image files.
+If the user asks you in any language to create, draw, or generate an image (e.g., 'وێنەیەک چێکە', 'وێنەیەک دروست بکە', 'draw an image'):
+- Never pretend or claim that you have generated or attached an image.
+- Politely inform the user in their language that this model is text-only and cannot render image files.
+- Offer to write an optimized descriptive prompt for image tools (like Midjourney or Flux) if they want, but be fully transparent that you cannot produce actual images.`;
+
+/** Prepend / merge the text-only rule into the outbound message list. */
+function withTextOnlySystemPrompt(messages) {
+  const list = Array.isArray(messages) ? messages.map((m) => ({ ...m })) : [];
+  const idx = list.findIndex((m) => m?.role === 'system');
+  if (idx >= 0) {
+    const prev = list[idx];
+    const existing =
+      typeof prev.content === 'string'
+        ? prev.content
+        : Array.isArray(prev.content)
+          ? prev.content
+              .filter((p) => p?.type === 'text' && p.text)
+              .map((p) => p.text)
+              .join('\n')
+          : '';
+    list[idx] = {
+      ...prev,
+      content: existing
+        ? `${existing.trim()}\n\n${TEXT_ONLY_SYSTEM_PROMPT}`
+        : TEXT_ONLY_SYSTEM_PROMPT,
+    };
+    return list;
+  }
+  return [{ role: 'system', content: TEXT_ONLY_SYSTEM_PROMPT }, ...list];
+}
+
 export async function POST(req) {
   try {
     const { messages, model, userEmail } = await req.json();
@@ -96,6 +129,7 @@ export async function POST(req) {
     }
 
     // ٣. هنارتنا پرسیارێ بۆ OpenRouter
+    const outboundMessages = withTextOnlySystemPrompt(messages);
     const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -106,7 +140,7 @@ export async function POST(req) {
       },
       body: JSON.stringify({
         model: model || "openai/gpt-4o-mini",
-        messages: messages,
+        messages: outboundMessages,
       }),
     });
 
