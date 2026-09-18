@@ -1,20 +1,37 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { isImageGenerationModel } from '@/lib/aiModels';
+import {
+  detectChatIntent,
+  editNeedsUploadReply,
+  HONEST_CHAT_SYSTEM_ADDON,
+  shouldTriggerImageGeneration,
+} from '@/lib/chatIntent';
 
 // گرێدان ب داتابەیسا Supabase ب کلیلا Service Role یان Anon
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 const supabase = createClient(supabaseUrl, supabaseKey);
 
-/** Base system instructions for text chat models only (never for image models). */
-const TEXT_ONLY_SYSTEM_PROMPT = `You are a text-only language model and CANNOT directly generate, draw, render, or attach image files.
+/** Base system instructions for text chat models only (never for image generation). */
+const TEXT_ONLY_SYSTEM_PROMPT = `You are a helpful AI assistant. When the active model is text-only, you CANNOT directly generate, draw, render, or attach image files.
 If the user asks you in any language to create, draw, or generate an image (e.g., 'وێنەیەک چێکە', 'وێنەیەک دروست بکە', 'draw an image'):
 - Never pretend or claim that you have generated or attached an image.
 - Politely inform the user in their language that this model is text-only and cannot render image files.
-- Offer to write an optimized descriptive prompt for image tools (like Midjourney or Flux) if they want, but be fully transparent that you cannot produce actual images.`;
+- Suggest switching to an Image model (Flux / Stable Diffusion) in the model picker for generation, or offer to write an optimized Midjourney/Flux prompt — be fully transparent that you cannot produce actual images yourself.
 
-function withTextOnlySystemPrompt(messages) {
+${HONEST_CHAT_SYSTEM_ADDON}`;
+
+/** When an image model is selected but the user asked a question / needs guidance. */
+const IMAGE_MODEL_HELP_SYSTEM_PROMPT = `You are assisting inside IPBITS AI Hub. An image-generation model is selected, but the user's latest message is NOT an explicit command to generate a new image.
+Respond with clear conversational text only — do NOT generate, invent, or attach any image.
+- If they ask whether you can edit/create images: explain that generation needs an imperative prompt (e.g. "generate an image of a cat on the moon" / "وێنەیەک چێکە بۆ...") while this image model is selected; editing needs an uploaded photo plus edit instructions.
+- If they want edits without an attachment: ask them to upload the image first and describe the adjustments.
+- Answer how-to / informational questions helpfully and honestly. Never output markdown image embeds or random scenery.
+
+${HONEST_CHAT_SYSTEM_ADDON}`;
+
+function withSystemPrompt(messages, systemText) {
   const list = Array.isArray(messages) ? messages.map((m) => ({ ...m })) : [];
   const idx = list.findIndex((m) => m?.role === 'system');
   if (idx >= 0) {
@@ -30,13 +47,11 @@ function withTextOnlySystemPrompt(messages) {
           : '';
     list[idx] = {
       ...prev,
-      content: existing
-        ? `${existing.trim()}\n\n${TEXT_ONLY_SYSTEM_PROMPT}`
-        : TEXT_ONLY_SYSTEM_PROMPT,
+      content: existing ? `${existing.trim()}\n\n${systemText}` : systemText,
     };
     return list;
   }
-  return [{ role: 'system', content: TEXT_ONLY_SYSTEM_PROMPT }, ...list];
+  return [{ role: 'system', content: systemText }, ...list];
 }
 
 function extractPromptText(messages) {
@@ -160,11 +175,68 @@ async function pollinationsFallback(promptText, model) {
   };
 }
 
+async function runTextCompletion({
+  apiKey,
+  model,
+  messages,
+  systemPrompt,
+  userProfile,
+}) {
+  // Prefer a chat-capable model when the picker has an image-only slug selected
+  // but the user asked a question — fall back to a free text model if needed.
+  let chatModel = model;
+  if (isImageGenerationModel(model)) {
+    chatModel =
+      process.env.OPENROUTER_HELP_MODEL ||
+      'meta-llama/llama-3.2-3b-instruct:free';
+  }
+
+  const outboundMessages = withSystemPrompt(messages, systemPrompt);
+  const { response, data } = await callOpenRouter({
+    apiKey,
+    model: chatModel,
+    messages: outboundMessages,
+  });
+
+  if (!response.ok) {
+    const errMsg = data.error?.message || 'ئاریشەیەک هەیە د کلیلێ یان باڵانسی دا';
+    return { error: errMsg, status: response.status };
+  }
+
+  const reply =
+    normalizeAssistantContent(data.choices?.[0]?.message) ||
+    data.choices?.[0]?.message?.content ||
+    'بەرسڤ نەهات.';
+  const usage = data.usage || null;
+  const { costUsd, pointsSpent } = computeCostAndPoints(usage, chatModel);
+  const remainingPoints = await deductPoints(userProfile, pointsSpent, {
+    action_type: 'chat',
+    model_used: chatModel,
+    cost_usd: costUsd,
+  });
+
+  return {
+    reply,
+    usage,
+    cost_usd: costUsd,
+    points_spent: pointsSpent,
+    remaining_points: remainingPoints,
+    is_image: false,
+    model: chatModel,
+  };
+}
+
 export async function POST(req) {
   try {
     const { messages, model, userEmail } = await req.json();
     const selectedModel = String(model || 'openai/gpt-4o-mini').trim();
     const imageModel = isImageGenerationModel(selectedModel);
+    const promptText = extractPromptText(messages);
+    const intent = detectChatIntent({
+      prompt: promptText,
+      modelIsImage: imageModel,
+      messages,
+    });
 
     // ١. ئینانا زانیاریێن کڕیاری و پشکنینا باڵانسی ژ profiles
     let activeApiKey = process.env.OPENROUTER_API_KEY;
@@ -198,10 +270,28 @@ export async function POST(req) {
       );
     }
 
-    const promptText = extractPromptText(messages);
+    // Edit request without an uploaded image → ask to attach (no generation, no points burn on fake art)
+    if (intent.kind === 'edit_needs_upload') {
+      return NextResponse.json({
+        reply: editNeedsUploadReply(),
+        usage: null,
+        cost_usd: 0,
+        points_spent: 0,
+        remaining_points: userProfile?.points ?? null,
+        is_image: false,
+        model: selectedModel,
+        intent: intent.kind,
+      });
+    }
 
-    // ٢. Image models → OpenRouter (selected model id), pollinations fallback for Flux-like
-    if (imageModel) {
+    // ٢. Image generation ONLY when image model + explicit imperative command
+    const triggerGenerate = shouldTriggerImageGeneration({
+      modelIsImage: imageModel,
+      prompt: promptText,
+      messages,
+    });
+
+    if (triggerGenerate) {
       const imageMessages = Array.isArray(messages)
         ? messages.filter((m) => m?.role !== 'system')
         : [];
@@ -234,7 +324,6 @@ export async function POST(req) {
       }
 
       if (!reply || !/!\[[^\]]*\]\(|data:image\/|https?:\/\//.test(reply)) {
-        // Fallback for Flux / SD-style when OpenRouter returns no image payload
         const fallback = await pollinationsFallback(promptText, selectedModel);
         reply = fallback.reply;
         usage = fallback.usage;
@@ -257,43 +346,31 @@ export async function POST(req) {
         remaining_points: remainingPoints,
         is_image: true,
         model: usedModel,
+        intent: 'generate_image',
       });
     }
 
-    // ٣. Text models → OpenRouter with text-only system prompt (no keyword image hijack)
-    const outboundMessages = withTextOnlySystemPrompt(messages);
-    const { response, data } = await callOpenRouter({
+    // ٣. Conversational text — image model selected but question/help, OR normal text model
+    const systemPrompt =
+      imageModel || intent.kind === 'text_help'
+        ? IMAGE_MODEL_HELP_SYSTEM_PROMPT
+        : TEXT_ONLY_SYSTEM_PROMPT;
+
+    const result = await runTextCompletion({
       apiKey: activeApiKey,
       model: selectedModel,
-      messages: outboundMessages,
+      messages,
+      systemPrompt,
+      userProfile,
     });
 
-    if (!response.ok) {
-      const errMsg = data.error?.message || 'ئاریشەیەک هەیە د کلیلێ یان باڵانسی دا';
-      return NextResponse.json({ error: errMsg }, { status: response.status });
+    if (result.error) {
+      return NextResponse.json({ error: result.error }, { status: result.status || 500 });
     }
 
-    const reply =
-      normalizeAssistantContent(data.choices?.[0]?.message) ||
-      data.choices?.[0]?.message?.content ||
-      'بەرسڤ نەهات.';
-    const usage = data.usage || null;
-    const { costUsd, pointsSpent } = computeCostAndPoints(usage, selectedModel);
-
-    const remainingPoints = await deductPoints(userProfile, pointsSpent, {
-      action_type: 'chat',
-      model_used: selectedModel,
-      cost_usd: costUsd,
-    });
-
     return NextResponse.json({
-      reply,
-      usage,
-      cost_usd: costUsd,
-      points_spent: pointsSpent,
-      remaining_points: remainingPoints,
-      is_image: false,
-      model: selectedModel,
+      ...result,
+      intent: intent.kind,
     });
   } catch (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
