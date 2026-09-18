@@ -2,14 +2,22 @@
  * Telegram inline keyboard + helpers for one-click admin approval.
  */
 
-export function buildApproveKeyboard({ orderId }) {
-  const id = String(orderId || '').slice(0, 40);
+export function buildApproveKeyboard({ orderId, planId }) {
+  const id = String(orderId || '').slice(0, 36);
+  const planTag = String(planId || '')
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, '')
+    .slice(0, 8);
+  const approveData = planTag
+    ? `approve_order:${id}:${planTag}`.slice(0, 64)
+    : `approve_order:${id}`.slice(0, 64);
   return {
     inline_keyboard: [
       [
         {
           text: 'پەسەندکرن و دروستکرنا کلیلێ ✅',
-          callback_data: `approve_order:${id}`,
+          callback_data: approveData,
         },
         {
           text: 'ڕەتکرن ❌',

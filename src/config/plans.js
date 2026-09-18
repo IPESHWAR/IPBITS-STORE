@@ -94,44 +94,80 @@ const PLAN_ALIASES = {
   '365d': 'yearly',
 };
 
-/** Infer plan from free-text (item labels, captions, Kurdish/Arabic/English names). */
-export function inferPlanFromText(text = '') {
-  const raw = String(text || '');
-  const hay = raw.toLowerCase();
+/** Map duration prefix tags (1D/7D/…) → plan id */
+const SUFFIX_TO_PLAN_ID = {
+  '1D': 'test',
+  '7D': 'weekly',
+  '30D': 'monthly',
+  '90D': 'three_months',
+  '365D': 'yearly',
+  '1Y': 'yearly',
+};
 
-  // 1 Day / Trial / تێست — check BEFORE monthly (مەهـ overlaps مەهانە)
+/** Normalize multilingual order / plan text for matching. */
+export function normalizePlanHaystack(text = '') {
+  return String(text || '')
+    .normalize('NFC')
+    .replace(/[\u200B-\u200D\uFEFF]/g, '')
+    .replace(/ي/g, 'ی')
+    .replace(/ك/g, 'ک')
+    .replace(/ة/g, 'ه')
+    .toLowerCase();
+}
+
+/**
+ * Infer plan from free-text (item labels, captions, Kurdish/Arabic/English names).
+ * Order matters: trial/1D before monthly so "تێست" never becomes 30D.
+ */
+export function inferPlanFromText(text = '') {
+  const hay = normalizePlanHaystack(text);
+  if (!hay.trim()) return null;
+
+  // 1 Day / Trial / تێست / تست
   if (
-    /تێست|تیست|تجربة|\btrial\b|\btest_1d\b|\b1_day\b|\b1day\b|\b1\s*d\b|\b1\s*day\b|\bdaily\b|\btst\b|ai_bundle_1_day/.test(
+    /تێست|تیست|تست|تجرب|trial|test[_\s-]?1d|1_day|1day|\b1\s*d\b|1\s*day|١\s*ڕۆژ|١\s*رۆژ|1\s*ڕۆژ|1\s*رۆژ|\bdaily\b|\btst\b|ai_bundle_1_day|٢٤\s*دەمژمێر|24\s*hour/.test(
       hay
-    ) ||
-    /تێست|تیست/.test(raw)
+    )
   ) {
     return SUBSCRIPTION_PLANS.test;
   }
+
+  // 1 Year / ساڵانە (before monthly)
   if (
-    /ساڵانە|سنوي|\byearly\b|\b1_year\b|\b1y\b|\b365d\b|ai_bundle_1_year|١\s*ساڵ|1\s*year/.test(hay) ||
-    /ساڵانە/.test(raw)
+    /ساڵانە|سالانە|سنوي|yearly|annual|1_year|\b1y\b|365d|ai_bundle_1_year|١\s*ساڵ|1\s*year|سالانه/.test(
+      hay
+    )
   ) {
     return SUBSCRIPTION_PLANS.yearly;
   }
+
+  // 90 Days / ٣ مانگ
   if (
-    /٣\s*مەه|٣\s*مانگ|٣ مەه|3months|3_months|90_days|90d|quarterly|ai_bundle_90/.test(hay) ||
-    /٣\s*مەه/.test(raw)
+    /٣\s*مانگ|٣\s*مەه|3\s*months?|3months|3_months|90_days|\b90d\b|٩٠\s*ڕۆژ|٩٠\s*رۆژ|90\s*ڕۆژ|quarterly|ai_bundle_90/.test(
+      hay
+    )
   ) {
     return SUBSCRIPTION_PLANS.three_months;
   }
+
+  // 7 Days / هەفتانە
   if (
-    /هەفتانە|أسبوعي|\bweekly\b|\b7_days\b|\b7d\b|ai_bundle_7_days|٧\s*ڕۆژ|7\s*day/.test(hay) ||
-    /هەفتانە/.test(raw)
+    /هەفتانە|هفتانه|أسبوعي|weekly|7_days|\b7d\b|٧\s*ڕۆژ|٧\s*رۆژ|7\s*ڕۆژ|7\s*رۆژ|7\s*days?|ai_bundle_7_days/.test(
+      hay
+    )
   ) {
     return SUBSCRIPTION_PLANS.weekly;
   }
+
+  // 30 Days / مانگانە / مەهانە
   if (
-    /مەهانە|مانگانە|شهري|\bmonthly\b|\b30_days\b|\b30d\b|ai_bundle_30_days|٣٠\s*ڕۆژ|30\s*day/.test(hay) ||
-    /مەهانە|مانگانە/.test(raw)
+    /مانگانە|مەهانە|شهري|monthly|30_days|\b30d\b|٣٠\s*ڕۆژ|٣٠\s*رۆژ|30\s*ڕۆژ|30\s*رۆژ|30\s*days?|ai_bundle_30_days/.test(
+      hay
+    )
   ) {
     return SUBSCRIPTION_PLANS.monthly;
   }
+
   return null;
 }
 
@@ -171,11 +207,26 @@ export function inferPlanFromDurationDays(days) {
   return SUBSCRIPTION_PLANS.yearly;
 }
 
+/** Resolve plan from callback planId / suffix (1D, test_1d, weekly, …). */
+export function resolvePlanFromPlanId(planId) {
+  if (!planId) return null;
+  const raw = String(planId).trim();
+  const upper = raw.toUpperCase().replace(/[^A-Z0-9]/g, '');
+  if (SUFFIX_TO_PLAN_ID[upper]) return SUBSCRIPTION_PLANS[SUFFIX_TO_PLAN_ID[upper]];
+  const lower = raw.toLowerCase();
+  const alias = PLAN_ALIASES[lower];
+  if (alias && SUBSCRIPTION_PLANS[alias]) return SUBSCRIPTION_PLANS[alias];
+  if (SUBSCRIPTION_PLANS[lower]) return SUBSCRIPTION_PLANS[lower];
+  return inferPlanFromText(raw);
+}
+
 /**
  * Resolve the correct subscription plan for license prefix generation.
- * Prefer explicit IDs, then duration, text (تێست/…), then price — never guess 30D for trials.
+ * Priority: callback planId → message/item text (تێست…) → price → duration → DB plan_type.
+ * Never let a stale monthly DB field override an explicit "تێست" in the order text.
  */
 export function resolvePlanFromOrderContext({
+  planId,
   planType,
   durationDays,
   items,
@@ -185,18 +236,8 @@ export function resolvePlanFromOrderContext({
   totalIQD,
   totalUSD,
 } = {}) {
-  const explicit = planType && String(planType).trim();
-  if (explicit && explicit !== 'account_service') {
-    const lower = explicit.toLowerCase();
-    const alias = PLAN_ALIASES[lower];
-    if (alias && SUBSCRIPTION_PLANS[alias]) return SUBSCRIPTION_PLANS[alias];
-    if (SUBSCRIPTION_PLANS[lower]) return SUBSCRIPTION_PLANS[lower];
-    const fromExplicitText = inferPlanFromText(explicit);
-    if (fromExplicitText) return fromExplicitText;
-  }
-
-  const fromDays = inferPlanFromDurationDays(durationDays);
-  if (fromDays) return fromDays;
+  const fromCallback = resolvePlanFromPlanId(planId);
+  if (fromCallback) return fromCallback;
 
   const list = Array.isArray(items) ? items : [];
   const itemHay = list
@@ -208,6 +249,15 @@ export function resolvePlanFromOrderContext({
 
   const fromPrice = inferPlanFromPrice({ totalIQD, totalUSD });
   if (fromPrice) return fromPrice;
+
+  const fromDays = inferPlanFromDurationDays(durationDays);
+  if (fromDays) return fromDays;
+
+  const explicit = planType && String(planType).trim();
+  if (explicit && explicit !== 'account_service') {
+    const fromExplicit = resolvePlanFromPlanId(explicit);
+    if (fromExplicit) return fromExplicit;
+  }
 
   return SUBSCRIPTION_PLANS.test;
 }

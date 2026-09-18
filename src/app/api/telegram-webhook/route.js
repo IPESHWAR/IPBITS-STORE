@@ -496,16 +496,20 @@ export async function POST(req) {
         await handleConfirmAcc(cq);
         return okResponse();
       }
-      // Legacy AI path only: approve_order:<phone|ref>:<tier>
-      // Checkout / keyboard order approval: approve_order:<orderId> or approve:<orderId>
+      // Legacy AI path only: approve_order:<phone|ref>:<tierName>
+      // Checkout order approval: approve_order:<orderId> or approve_order:<orderId>:<1D|7D|…>
       if (data.startsWith('approve_order:')) {
         const rest = data.slice('approve_order:'.length);
         const segs = rest.split(':').filter(Boolean);
-        if (segs.length >= 2) {
+        const planSuffixRe = /^(1D|7D|30D|90D|365D|1Y|TEST|TEST_1D|WEEKLY|MONTHLY|YEARLY|TST|WK|MO|3M|YR)$/i;
+        const isCheckoutApprove =
+          segs.length === 1 ||
+          (segs.length === 2 && (/^ord_/i.test(segs[0]) || planSuffixRe.test(segs[1])));
+        if (segs.length >= 2 && !isCheckoutApprove) {
           await handleApproveOrderCallback(cq);
           return okResponse();
         }
-        // Single-segment orderId → fall through to approval webhook
+        // Order approval → fall through to approval webhook
       }
 
       try {

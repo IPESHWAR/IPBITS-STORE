@@ -47,11 +47,13 @@ export async function createLicenseKey({
 
   const subscription = resolveSubscriptionPlan(planType);
   const packageType = toAutomatedPackageType(planType || subscription.id);
+  const resolvedSuffix = planSuffix || subscription.plan_suffix;
 
   const automated = await createAutomatedLicense(packageType, {
     customerPhone,
     customerName,
     orderId,
+    planSuffix: resolvedSuffix,
   });
 
   if (automated.ok && automated.license_code) {
@@ -77,8 +79,7 @@ export async function createLicenseKey({
   );
 
   const resolvedDuration = durationDays || subscription.duration_days;
-  const resolvedSuffix = planSuffix || subscription.plan_suffix;
-  const resolvedPlanType = planType || subscription.plan_type;
+  const resolvedPlanType = subscription.plan_type || planType;
   const expiresAt = computeExpiresAt(resolvedDuration);
 
   for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {

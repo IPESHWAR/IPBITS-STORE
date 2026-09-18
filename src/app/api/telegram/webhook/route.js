@@ -84,11 +84,15 @@ export async function POST(req) {
     }
 
     if (isApproveOrder) {
-      const orderId = data.startsWith('approve_order:')
+      const rest = data.startsWith('approve_order:')
         ? data.slice('approve_order:'.length).trim()
         : data.slice('approve:'.length).trim();
+      const parts = rest.split(':').filter(Boolean);
+      const orderId = parts[0] || '';
+      const planIdFromCallback = parts[1] || '';
       await handleApprove({
         orderId,
+        planId: planIdFromCallback,
         chatId,
         messageId,
         hasPhoto,
@@ -120,14 +124,21 @@ function parseOrderFromCaption(text) {
   const nameMatch = raw.match(/👤\s*کڕیار:\s*(.+)/);
   const phoneMatch = raw.match(/📞\s*واتساپ:\s*(.+)/);
   const kindMatch = raw.match(/🏷\s*جۆر:\s*(.+)/);
-  const productMatch = raw.match(/📦\s*بەرهەم:\s*(.+)/);
+  const productMatch =
+    raw.match(/📦\s*بەرهەم:\s*(.+)/) ||
+    raw.match(/پشکداری[اێ]?[:\s]+(.+)/i) ||
+    raw.match(/AI Hub\s*[-–:]\s*(.+)/i);
   const name = String(nameMatch?.[1] || '').trim();
   const phone = String(phoneMatch?.[1] || '').trim();
   const kind = String(kindMatch?.[1] || '').trim();
   const product = String(productMatch?.[1] || '').trim();
-  const captionKind = /AI Hub/i.test(kind) ? 'ai' : /Account Service/i.test(kind) ? 'account' : '';
+  const captionKind = /AI Hub/i.test(kind) || /AI Hub/i.test(raw)
+    ? 'ai'
+    : /Account Service/i.test(kind)
+      ? 'account'
+      : '';
   let planType = 'account_service';
-  if (captionKind === 'ai') {
+  if (captionKind === 'ai' || /تێست|تیست|تست|هەفتانە|مانگانە|مەهانە|ساڵانە|سالانە|AI Hub/i.test(raw)) {
     const inferred = inferPlanFromText(`${product} ${raw}`);
     planType = inferred?.plan_type || 'test_1d';
   }
@@ -136,7 +147,7 @@ function parseOrderFromCaption(text) {
     phone: phone && phone !== 'نینە' ? phone : '',
     product: product && product !== '—' ? product : '',
     planType,
-    captionKind,
+    captionKind: captionKind || (planType !== 'account_service' ? 'ai' : ''),
   };
 }
 
@@ -250,6 +261,7 @@ async function markOrderApproved(orderId, extra = {}) {
 
 async function handleApprove({
   orderId,
+  planId,
   chatId,
   messageId,
   hasPhoto,
@@ -271,6 +283,7 @@ async function handleApprove({
   const totalUSD = Number(order?.total_usd || 0);
   const productTitle = productTitleFromOrder(order, items, itemsLabel, parsed.product);
   const resolvedPlan = resolvePlanFromOrderContext({
+    planId: planId || undefined,
     planType: order?.plan_type || parsed.planType,
     durationDays: order?.duration_days,
     items,

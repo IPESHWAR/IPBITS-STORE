@@ -123,8 +123,10 @@ async function deactivateStoredKeys(phoneKeys, exceptId) {
   await Promise.all((data || []).map((row) => disableOpenRouterSubKey(row.or_hash).catch(() => null)));
 }
 
-async function allocateShortLicenseCode(packageType) {
-  const suffix = packageCodeSuffix(packageType === '3months' ? 'three_months' : packageType);
+async function allocateShortLicenseCode(packageType, planSuffixOverride) {
+  const suffix =
+    (planSuffixOverride && String(planSuffixOverride).toUpperCase().replace(/[^A-Z0-9]/g, '')) ||
+    packageCodeSuffix(packageType === '3months' ? 'three_months' : packageType);
   for (let attempt = 0; attempt < MAX_CODE_RETRIES; attempt++) {
     const licenseCode = generateShortLicenseCode(suffix);
     const { data: hit } = await supabaseAdmin
@@ -164,7 +166,7 @@ export async function createAutomatedLicense(packageType, options = {}) {
   const limits = AUTOMATED_PACKAGE_LIMITS[pkg];
   const plan = resolveSubscriptionPlan(pkg === '3months' ? 'three_months' : pkg);
   const expiresAt = computePlanExpiresAt(limits.expirationDays);
-  const licenseCode = await allocateShortLicenseCode(pkg);
+  const licenseCode = await allocateShortLicenseCode(pkg, options.planSuffix || plan.plan_suffix);
   if (!licenseCode) {
     return { ok: false, code: 'license_code_collision' };
   }

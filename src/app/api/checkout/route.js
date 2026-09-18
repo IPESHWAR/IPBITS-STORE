@@ -41,15 +41,22 @@ function buildCaption({ name, phone, itemsFormatted, finalIQD, paymentMethod, tr
   );
 }
 
-async function dispatchTelegram({ botToken, chatId, caption, image, orderId }) {
+async function dispatchTelegram({ botToken, chatId, caption, image, orderId, planId }) {
   const targetChatId = '5305335340';
+  const planTag = String(planId || '1D')
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, '')
+    .slice(0, 8) || '1D';
+  // Keep under Telegram's 64-byte callback_data limit
+  const callbackData = `approve_order:${String(orderId || '').slice(0, 40)}:${planTag}`.slice(0, 64);
 
   const keyboardObj = {
     inline_keyboard: [
       [
         {
           text: '✅ پەسەندکرن (Confirm)',
-          callback_data: `approve_order:${orderId}`,
+          callback_data: callbackData,
         },
       ],
     ],
@@ -186,6 +193,7 @@ export async function POST(request) {
           caption,
           image,
           orderId,
+          planId: kind === 'ai' ? plan?.plan_suffix || '1D' : undefined,
         });
         telegramOk = tgRes.ok;
         if (!tgRes.ok) {
