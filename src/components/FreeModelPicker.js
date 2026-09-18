@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Check, ChevronDown, Search, Sparkles } from 'lucide-react';
+import { Check, ChevronDown, Image as ImageIcon, Search, Sparkles } from 'lucide-react';
 import { OPENROUTER_FREE_ROUTER_ID } from '@/lib/aiModels';
 import { toLocalizedNumber } from '@/lib/i18n';
 
@@ -27,6 +27,9 @@ const ABBREV_RULES = [
   [/liquid|lfm/i, 'LQ'],
   [/cohere/i, 'CO'],
   [/phi-?\d|microsoft/i, 'PH'],
+  [/flux|black-forest/i, 'FX'],
+  [/stable.?diffusion|sdxl|stability/i, 'SD'],
+  [/recraft|dall-?e|ideogram/i, 'IG'],
   [/dots/i, 'DT'],
   [/poolside|laguna/i, 'PS'],
   [/ling|inclusion/i, 'LG'],
@@ -46,6 +49,7 @@ export default function FreeModelPicker({
   model,
   freeModels = [],
   paidModels = [],
+  imageModels = [],
   onChange,
   labels = {},
   lang = 'ku',
@@ -55,12 +59,18 @@ export default function FreeModelPicker({
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
+  const [tab, setTab] = useState('all'); // all | free | image
   const rootRef = useRef(null);
   const searchRef = useRef(null);
 
+  const allModels = useMemo(
+    () => [...freeModels, ...paidModels, ...imageModels],
+    [freeModels, paidModels, imageModels]
+  );
+
   const selected = useMemo(
-    () => [...freeModels, ...paidModels].find((m) => m.id === model) || freeModels[0] || null,
-    [freeModels, paidModels, model]
+    () => allModels.find((m) => m.id === model) || freeModels[0] || null,
+    [allModels, freeModels, model]
   );
 
   useEffect(() => {
@@ -90,12 +100,40 @@ export default function FreeModelPicker({
     });
   };
 
-  const visibleFree = filterList(freeModels);
-  const visiblePaid = filterList(paidModels);
+  const freeOnly = useMemo(
+    () =>
+      filterList([
+        ...freeModels,
+        ...imageModels.filter((m) => m.isFree || m.tier === 'free'),
+      ]),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [freeModels, imageModels, q]
+  );
+
+  const imageOnly = useMemo(
+    () => filterList(imageModels),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [imageModels, q]
+  );
+
+  const allVisible = useMemo(() => {
+    const freeVis = filterList(freeModels);
+    const paidVis = filterList(paidModels);
+    const imageVis = filterList(imageModels);
+    return { freeVis, paidVis, imageVis };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [freeModels, paidModels, imageModels, q]);
+
   const countLabel = (labels.freeModelsCount || '{n}+ Free AI Models').replace(
     '{n}',
     toLocalizedNumber(Math.max(freeModels.length, 0), lang === 'en' ? 'en' : 'ku')
   );
+
+  const tabs = [
+    { id: 'all', label: labels.tabAll || 'هەموو / All' },
+    { id: 'free', label: labels.tabFree || 'بێبەرامبەر / Free' },
+    { id: 'image', label: labels.tabImage || '🎨 وێنە / Image' },
+  ];
 
   const displayName = (m) => {
     if (!m) return labels.loadingModels || '...';
@@ -114,6 +152,131 @@ export default function FreeModelPicker({
     setOpen(false);
     setQuery('');
   };
+
+  const renderRow = (m, { locked = false, badge = null } = {}) => {
+    const active = m.id === model;
+    const router = m.isRouter || m.id === OPENROUTER_FREE_ROUTER_ID;
+    const ctx = formatContext(m.context_length);
+    const image = m.isImageModel;
+    return (
+      <button
+        key={m.id}
+        type="button"
+        role="option"
+        aria-selected={active}
+        onClick={() => pick(m.id, locked)}
+        className={`w-full text-start px-3 py-2.5 flex items-center gap-2 hover:bg-neutral-100 dark:hover:bg-white/[0.05] cursor-pointer ${
+          active ? 'bg-neutral-100 dark:bg-white/[0.07]' : ''
+        } ${locked ? 'opacity-70' : ''}`}
+      >
+        {router ? (
+          <Sparkles size={13} className="text-sky-500 dark:text-sky-300/80 shrink-0" />
+        ) : image ? (
+          <ImageIcon size={13} className="text-fuchsia-500 dark:text-fuchsia-300/80 shrink-0" />
+        ) : (
+          <span className="w-3.5 shrink-0" />
+        )}
+        <span className="min-w-0 flex-1 flex flex-col gap-0.5">
+          <span className="flex items-center gap-2 min-w-0 w-full">
+            <span
+              className="truncate min-w-0 flex-1 text-[12px] font-semibold text-neutral-800 dark:text-white/90"
+              title={displayName(m)}
+            >
+              {displayName(m)}
+            </span>
+            {locked ? (
+              <span className="shrink-0 text-[11px]" title={labels.paidLocked || 'Locked'}>
+                🔒
+              </span>
+            ) : (
+              badge
+            )}
+          </span>
+          <span className="block text-[10px] text-neutral-500 dark:text-white/40 truncate">
+            {[m.provider, image ? 'Image' : '', ctx ? `${ctx} ctx` : ''].filter(Boolean).join(' · ')}
+          </span>
+        </span>
+        {active && <Check size={13} className="text-sky-500 dark:text-sky-300 shrink-0" />}
+      </button>
+    );
+  };
+
+  const freeBadge = (
+    <span className="shrink-0 rounded-full bg-emerald-500/10 border border-emerald-500/20 px-1.5 py-0.5 text-[8px] font-semibold text-emerald-700 dark:text-emerald-300/90 whitespace-nowrap">
+      {labels.freeBadge || 'بەلاش / Free'}
+    </span>
+  );
+  const proBadge = (
+    <span className="shrink-0 rounded-full bg-sky-500/10 border border-sky-500/20 px-1.5 py-0.5 text-[8px] font-semibold text-sky-700 dark:text-sky-300/90 whitespace-nowrap">
+      Pro
+    </span>
+  );
+  const imageBadge = (
+    <span className="shrink-0 rounded-full bg-fuchsia-500/10 border border-fuchsia-500/20 px-1.5 py-0.5 text-[8px] font-semibold text-fuchsia-700 dark:text-fuchsia-300/90 whitespace-nowrap">
+      🎨
+    </span>
+  );
+
+  let listBody = null;
+  if (tab === 'free') {
+    listBody = freeOnly.length ? (
+      freeOnly.map((m) =>
+        renderRow(m, {
+          locked: !premiumUnlocked,
+          badge: m.isImageModel ? imageBadge : freeBadge,
+        })
+      )
+    ) : (
+      <p className="px-3 py-3 text-[11px] text-neutral-500 dark:text-white/40">{labels.searchModels}</p>
+    );
+  } else if (tab === 'image') {
+    listBody = imageOnly.length ? (
+      imageOnly.map((m) =>
+        renderRow(m, {
+          locked: !premiumUnlocked && !(m.isFree || m.tier === 'free'),
+          badge: m.isFree || m.tier === 'free' ? freeBadge : imageBadge,
+        })
+      )
+    ) : (
+      <p className="px-3 py-3 text-[11px] text-neutral-500 dark:text-white/40">
+        {labels.noImageModels || labels.searchModels}
+      </p>
+    );
+  } else {
+    const { freeVis, paidVis, imageVis } = allVisible;
+    listBody = (
+      <>
+        {freeVis.map((m) =>
+          renderRow(m, { locked: !premiumUnlocked, badge: freeBadge })
+        )}
+        {imageVis.length > 0 && (
+          <div className="px-3 pt-2 pb-1 text-[10px] font-semibold text-neutral-500 dark:text-white/45">
+            {labels.tabImage || '🎨 وێنە / Image'}
+          </div>
+        )}
+        {imageVis.map((m) =>
+          renderRow(m, {
+            locked: !premiumUnlocked && !(m.isFree || m.tier === 'free'),
+            badge: m.isFree || m.tier === 'free' ? freeBadge : imageBadge,
+          })
+        )}
+        {paidVis.length > 0 && (
+          <div className="px-3 pt-2 pb-1 text-[10px] font-semibold text-neutral-500 dark:text-white/45">
+            {labels.premiumModelsSection || labels.premiumModels || 'Pro'}
+          </div>
+        )}
+        {paidVis.map((m) =>
+          renderRow(m, {
+            locked: !premiumUnlocked,
+            badge: proBadge,
+          })
+        )}
+        {!freeVis.length && !paidVis.length && !imageVis.length && (
+          <p className="px-3 py-3 text-[11px] text-neutral-500 dark:text-white/40">{labels.searchModels}</p>
+        )}
+      </>
+    );
+  }
 
   return (
     <div className="relative" ref={rootRef}>
@@ -143,9 +306,10 @@ export default function FreeModelPicker({
               {countLabel}
             </span>
             <span className="shrink-0 inline-flex items-center rounded-md bg-neutral-100 border border-neutral-200/80 px-1.5 py-0.5 text-[9px] font-semibold text-neutral-600 dark:bg-white/[0.06] dark:border-white/10 dark:text-white/70">
-              {labels.freeBadge || 'بەلاش / Free'}
+              {allModels.length}
             </span>
           </div>
+
           <div className="px-2.5 pb-2">
             <label className="flex items-center gap-2 rounded-xl bg-neutral-50 border border-neutral-200/80 px-2.5 py-1.5 dark:bg-white/[0.03] dark:border-white/10">
               <Search size={13} className="text-neutral-400 dark:text-white/40 shrink-0" />
@@ -154,111 +318,36 @@ export default function FreeModelPicker({
                 type="search"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder={labels.searchModels || 'Gemini, DeepSeek, Llama...'}
+                placeholder={labels.searchModels || 'Gemini, DeepSeek, Flux...'}
                 className="w-full min-w-0 bg-transparent text-[11px] text-neutral-800 placeholder:text-neutral-400 focus:outline-none dark:text-white/90 dark:placeholder:text-white/35"
               />
             </label>
           </div>
+
+          <div className="px-2.5 pb-2 flex gap-1" role="tablist">
+            {tabs.map((t) => (
+              <button
+                key={t.id}
+                type="button"
+                role="tab"
+                aria-selected={tab === t.id}
+                onClick={() => setTab(t.id)}
+                className={`flex-1 rounded-lg px-1.5 py-1.5 text-[9px] sm:text-[10px] font-semibold transition-colors cursor-pointer ${
+                  tab === t.id
+                    ? 'bg-emerald-500/15 text-emerald-800 border border-emerald-500/30 dark:bg-emerald-500/20 dark:text-emerald-200 dark:border-emerald-400/30'
+                    : 'bg-neutral-50 text-neutral-600 border border-neutral-200/80 hover:bg-neutral-100 dark:bg-white/[0.03] dark:text-white/55 dark:border-white/10 dark:hover:bg-white/[0.06]'
+                }`}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
+
           <div
             className="max-h-60 overflow-y-auto overscroll-contain pb-1.5 [-webkit-overflow-scrolling:touch]"
             role="listbox"
           >
-            {visibleFree.map((m) => {
-              const active = m.id === model;
-              const router = m.isRouter || m.id === OPENROUTER_FREE_ROUTER_ID;
-              const ctx = formatContext(m.context_length);
-              const locked = !premiumUnlocked;
-              return (
-                <button
-                  key={m.id}
-                  type="button"
-                  role="option"
-                  aria-selected={active}
-                  onClick={() => pick(m.id, locked)}
-                  className={`w-full text-start px-3 py-2.5 flex items-center gap-2 hover:bg-neutral-100 dark:hover:bg-white/[0.05] cursor-pointer ${
-                    active ? 'bg-neutral-100 dark:bg-white/[0.07]' : ''
-                  } ${locked ? 'opacity-70' : ''}`}
-                >
-                  {router ? (
-                    <Sparkles size={13} className="text-sky-500 dark:text-sky-300/80 shrink-0" />
-                  ) : (
-                    <span className="w-3.5 shrink-0" />
-                  )}
-                  <span className="min-w-0 flex-1 flex flex-col gap-0.5">
-                    <span className="flex items-center gap-2 min-w-0 w-full">
-                      <span
-                        className="truncate min-w-0 flex-1 text-[12px] font-semibold text-neutral-800 dark:text-white/90"
-                        title={displayName(m)}
-                      >
-                        {displayName(m)}
-                      </span>
-                      {locked ? (
-                        <span className="shrink-0 text-[11px]" title={labels.paidLocked || 'Locked'}>
-                          🔒
-                        </span>
-                      ) : (
-                        <span className="shrink-0 rounded-full bg-emerald-500/10 border border-emerald-500/20 px-1.5 py-0.5 text-[8px] font-semibold text-emerald-700 dark:text-emerald-300/90 whitespace-nowrap">
-                          {labels.freeBadge || 'بەلاش / Free'}
-                        </span>
-                      )}
-                    </span>
-                    <span className="block text-[10px] text-neutral-500 dark:text-white/40 truncate">
-                      {[m.provider, ctx ? `${ctx} ctx` : ''].filter(Boolean).join(' · ')}
-                    </span>
-                  </span>
-                  {active && <Check size={13} className="text-sky-500 dark:text-sky-300 shrink-0" />}
-                </button>
-              );
-            })}
-            {visiblePaid.length > 0 && (
-              <div className="px-3 pt-2 pb-1 text-[10px] font-semibold text-neutral-500 dark:text-white/45">
-                {labels.premiumModelsSection || labels.premiumModels || 'Pro'}
-              </div>
-            )}
-            {visiblePaid.map((m) => {
-              const active = m.id === model;
-              const locked = !premiumUnlocked;
-              return (
-                <button
-                  key={m.id}
-                  type="button"
-                  role="option"
-                  aria-selected={active}
-                  onClick={() => pick(m.id, true)}
-                  className={`w-full text-start px-3 py-2.5 flex items-center gap-2 hover:bg-neutral-100 dark:hover:bg-white/[0.05] cursor-pointer ${
-                    active ? 'bg-neutral-100 dark:bg-white/[0.07]' : ''
-                  } ${locked ? 'opacity-70' : ''}`}
-                >
-                  <span className="w-3.5 shrink-0" />
-                  <span className="min-w-0 flex-1 flex flex-col gap-0.5">
-                    <span className="flex items-center gap-2 min-w-0 w-full">
-                      <span
-                        className="truncate min-w-0 flex-1 text-[12px] font-semibold text-neutral-800 dark:text-white/90"
-                        title={displayName(m)}
-                      >
-                        {displayName(m)}
-                      </span>
-                      {locked ? (
-                        <span className="shrink-0 text-[11px]" title={labels.paidLocked || 'Locked'}>
-                          🔒
-                        </span>
-                      ) : (
-                        <span className="shrink-0 rounded-full bg-sky-500/10 border border-sky-500/20 px-1.5 py-0.5 text-[8px] font-semibold text-sky-700 dark:text-sky-300/90 whitespace-nowrap">
-                          Pro
-                        </span>
-                      )}
-                    </span>
-                    <span className="block text-[10px] text-neutral-500 dark:text-white/40 truncate">
-                      {(locked ? '🔒 Pro · ' : 'Pro · ') + (m.provider || '')}
-                    </span>
-                  </span>
-                  {active && <Check size={13} className="text-sky-500 dark:text-sky-300 shrink-0" />}
-                </button>
-              );
-            })}
-            {!visibleFree.length && !visiblePaid.length && (
-              <p className="px-3 py-3 text-[11px] text-neutral-500 dark:text-white/40">{labels.searchModels}</p>
-            )}
+            {listBody}
           </div>
         </div>
       )}

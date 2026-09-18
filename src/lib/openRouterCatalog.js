@@ -15,12 +15,18 @@ let memoryCache = {
 function shapePayload(catalog, source) {
   const free = catalog.free || [];
   const paid = catalog.paid || [];
+  const image = catalog.image || [];
+  const all = [...free, ...paid, ...image];
   return {
     free,
     paid,
-    models: free,
+    image,
+    all,
+    models: all,
     defaultModel: pickDefaultModel(free),
-    count: free.length,
+    count: all.length,
+    freeCount: free.length,
+    imageCount: image.length,
     source,
     cachedAt: new Date().toISOString(),
   };
@@ -28,15 +34,11 @@ function shapePayload(catalog, source) {
 
 async function fetchLiveCatalog() {
   const apiKey = String(process.env.OPENROUTER_API_KEY || '').trim();
-  if (!apiKey) {
-    throw new Error('openrouter_api_key_missing');
-  }
+  const headers = { Accept: 'application/json' };
+  if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
 
   const res = await fetch(OPENROUTER_MODELS_URL, {
-    headers: {
-      Accept: 'application/json',
-      Authorization: `Bearer ${apiKey}`,
-    },
+    headers,
     next: { revalidate: 3600 },
   });
 
@@ -48,10 +50,12 @@ async function fetchLiveCatalog() {
   const list = Array.isArray(data?.data) ? data.data : [];
   if (!list.length) throw new Error('openrouter_models_empty');
 
-  const { free, paid } = categorizeOpenRouterModels(list);
-  if (!free.length && !paid.length) throw new Error('openrouter_models_filtered_empty');
+  const { free, paid, image } = categorizeOpenRouterModels(list);
+  if (!free.length && !paid.length && !image.length) {
+    throw new Error('openrouter_models_filtered_empty');
+  }
 
-  return shapePayload({ free, paid }, 'openrouter');
+  return shapePayload({ free, paid, image }, 'openrouter');
 }
 
 export async function getOpenRouterCatalog() {

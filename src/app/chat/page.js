@@ -22,8 +22,14 @@ import ChatHeader from '@/components/ChatHeader';
 import FreeModelPicker from '@/components/FreeModelPicker';
 import ChatAccessGate from '@/components/ChatAccessGate';
 import CreditRedeemModal from '@/components/CreditRedeemModal';
+import ChatMarkdown from '@/components/ChatMarkdown';
 import { useLanguage } from '@/components/LanguageProvider';
 import { useUser } from '@/components/UserProvider';
+import {
+  FALLBACK_FREE_MODELS,
+  FALLBACK_IMAGE_MODELS,
+  FALLBACK_PAID_MODELS,
+} from '@/lib/aiModels';
 import {
   getAccessCredits,
   isLicenseActive,
@@ -32,7 +38,7 @@ import {
 } from '@/lib/licenseSession';
 import { deductVipPoints, getVipPoints } from '@/lib/vipPoints';
 
-const FALLBACK_DEFAULT = 'meta-llama/llama-3.2-3b-instruct:free';
+const FALLBACK_DEFAULT = 'deepseek/deepseek-r1:free';
 const MAX_ATTACHMENT_TEXT = 120_000;
 
 const TEXT_FILE_RE =
@@ -260,23 +266,9 @@ function CodeBlock({ code, language }) {
   );
 }
 
-function renderMessageContent(content) {
+function renderMessageContent(content, imageCaption) {
   if (typeof content !== 'string') return content;
-  const parts = content.split(/(```[\s\S]*?```)/g);
-
-  return parts.map((part, index) => {
-    if (part && part.startsWith('```') && part.endsWith('```')) {
-      const match = part.match(/```(\w+)?\n?([\s\S]*?)```/);
-      const language = match ? match[1] || 'code' : 'code';
-      const code = match ? match[2].trim() : part.slice(3, -3).trim();
-      return <CodeBlock key={index} code={code} language={language} />;
-    }
-    return (
-      <span key={index} className="whitespace-pre-wrap leading-relaxed">
-        {part}
-      </span>
-    );
-  });
+  return <ChatMarkdown content={content} imageCaption={imageCaption} />;
 }
 
 export default function ChatPage() {
@@ -291,6 +283,7 @@ export default function ChatPage() {
   const [model, setModel] = useState(FALLBACK_DEFAULT);
   const [freeModels, setFreeModels] = useState([]);
   const [paidModels, setPaidModels] = useState([]);
+  const [imageModels, setImageModels] = useState([]);
   const [loadingModels, setLoadingModels] = useState(true);
   const [loading, setLoading] = useState(false);
   const [attachment, setAttachment] = useState(null);
@@ -444,11 +437,13 @@ export default function ChatPage() {
         if (cancelled) return;
         const frees = Array.isArray(data?.free) ? data.free : [];
         const paids = Array.isArray(data?.paid) ? data.paid : [];
+        const images = Array.isArray(data?.image) ? data.image : [];
         setFreeModels(frees);
         setPaidModels(paids);
+        setImageModels(images);
 
         const preferred = data?.defaultModel || FALLBACK_DEFAULT;
-        const all = [...frees, ...paids];
+        const all = [...frees, ...paids, ...images];
         if (all.some((m) => m.id === preferred)) {
           setModel(preferred);
         } else if (frees[0]?.id) {
@@ -458,14 +453,9 @@ export default function ChatPage() {
       .catch((err) => {
         console.error('Error fetching models:', err);
         if (!cancelled) {
-          setFreeModels([
-            {
-              id: FALLBACK_DEFAULT,
-              name: 'Llama 3.2 3B Instruct',
-              tier: 'free',
-              provider: 'Meta',
-            },
-          ]);
+          setFreeModels(FALLBACK_FREE_MODELS);
+          setPaidModels(FALLBACK_PAID_MODELS);
+          setImageModels(FALLBACK_IMAGE_MODELS);
           setModel(FALLBACK_DEFAULT);
         }
       })
@@ -497,6 +487,10 @@ export default function ChatPage() {
       autoRouterName: c.autoRouterName,
       loadingModels: c.loadingModels,
       paidLocked: c.paidLocked,
+      tabAll: c.tabAll || 'هەموو / All',
+      tabFree: c.tabFree || 'بێبەرامبەر / Free',
+      tabImage: c.tabImage || '🎨 وێنە / Image',
+      noImageModels: c.noImageModels,
     }),
     [c]
   );
@@ -768,6 +762,7 @@ export default function ChatPage() {
               model={model}
               freeModels={freeModels}
               paidModels={paidModels}
+              imageModels={imageModels}
               onChange={setModel}
               labels={pickerLabels}
               lang={lang}
@@ -819,9 +814,9 @@ export default function ChatPage() {
             </div>
 
             <div
-              className={`px-3.5 py-3 sm:px-4 sm:py-3.5 rounded-2xl max-w-[85%] sm:max-w-[80%] text-[13px] sm:text-sm leading-relaxed overflow-hidden break-words whitespace-pre-wrap ${
+              className={`px-3.5 py-3 sm:px-4 sm:py-3.5 rounded-2xl max-w-[85%] sm:max-w-[80%] text-[13px] sm:text-sm leading-relaxed overflow-hidden break-words ${
                 m.role === 'user'
-                  ? 'bg-white/[0.08] border border-white/10 text-white/90 rounded-br-md'
+                  ? 'bg-white/[0.08] border border-white/10 text-white/90 rounded-br-md whitespace-pre-wrap'
                   : 'bg-transparent text-white/70 rounded-bl-md'
               }`}
             >
@@ -837,26 +832,9 @@ export default function ChatPage() {
               ) : null}
 
               {m.content ? (
-                typeof m.content === 'string' &&
-                (m.content.includes('![AI Image]') ||
-                  m.content.includes('image.pollinations.ai') ||
-                  m.content.startsWith('http://') ||
-                  m.content.startsWith('https://')) &&
-                (m.content.includes('.jpg') ||
-                  m.content.includes('.png') ||
-                  m.content.includes('pollinations.ai')) ? (
-                  <div className="space-y-2 max-w-full">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={m.content.replace('![AI Image](', '').replace(')', '').trim()}
-                      alt="AI Generated"
-                      className="rounded-2xl max-w-full w-full border border-white/10 shadow-xl object-cover"
-                    />
-                    <span className="text-[10px] text-white/45 block">{c.imageCreated}</span>
-                  </div>
-                ) : (
-                  <div className="max-w-full overflow-x-auto">{renderMessageContent(m.content)}</div>
-                )
+                <div className="max-w-full overflow-x-auto">
+                  {renderMessageContent(m.content, c.imageCreated)}
+                </div>
               ) : m.attachment && !m.content ? (
                 <span className="text-white/45 text-xs italic">{c.attachedOnly || ''}</span>
               ) : null}

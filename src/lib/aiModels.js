@@ -42,7 +42,15 @@ const PROVIDER_LABELS = {
   moonshot: 'Moonshot',
   '01': '01.AI',
   '01-ai': '01.AI',
+  'black-forest-labs': 'Black Forest Labs',
+  stabilityai: 'Stability AI',
+  'stability-ai': 'Stability AI',
+  recraft: 'Recraft',
+  ideogram: 'Ideogram',
 };
+
+const IMAGE_MODEL_RE =
+  /\b(flux|recraft|dall-?e|stable.?diffusion|sdxl|sd3|imagen|ideogram|playground.?v|black-forest-labs|midjourney|kandinsky|lumina)\b/i;
 
 export function inferProvider(modelId, modelName = '') {
   const slug = String(modelId || '').split('/')[0].toLowerCase();
@@ -75,42 +83,56 @@ export const OPENROUTER_FREE_AUTO = {
   provider: 'OpenRouter',
   context_length: null,
   tier: 'free',
+  isFree: true,
+  isImageModel: false,
   isRouter: true,
 };
 
 /**
  * Robust static fallback when OpenRouter is unreachable.
- * 10+ popular free chat models.
+ * DeepSeek / Gemini / Claude + popular free chat models.
  */
 export const FALLBACK_FREE_MODELS = [
-  { id: 'meta-llama/llama-3.2-3b-instruct:free', name: 'Llama 3.2 3B Instruct', tier: 'free' },
-  { id: 'meta-llama/llama-3.3-70b-instruct:free', name: 'Llama 3.3 70B Instruct', tier: 'free' },
-  { id: 'google/gemma-3-4b-it:free', name: 'Gemma 3 4B', tier: 'free' },
-  { id: 'google/gemma-2-9b-it:free', name: 'Gemma 2 9B', tier: 'free' },
-  { id: 'mistralai/mistral-small-3.1-24b-instruct:free', name: 'Mistral Small 3.1 24B', tier: 'free' },
-  { id: 'mistralai/mistral-7b-instruct:free', name: 'Mistral 7B Instruct', tier: 'free' },
-  { id: 'qwen/qwen3-4b:free', name: 'Qwen3 4B', tier: 'free' },
-  { id: 'qwen/qwen-2.5-7b-instruct:free', name: 'Qwen 2.5 7B Instruct', tier: 'free' },
   { id: 'deepseek/deepseek-r1:free', name: 'DeepSeek R1', tier: 'free' },
   { id: 'deepseek/deepseek-chat-v3-0324:free', name: 'DeepSeek Chat V3', tier: 'free' },
-  { id: 'microsoft/phi-3-mini-128k-instruct:free', name: 'Phi-3 Mini 128K', tier: 'free' },
-  { id: 'microsoft/phi-4:free', name: 'Phi-4', tier: 'free' },
   { id: 'google/gemini-2.0-flash-exp:free', name: 'Gemini 2.0 Flash Exp', tier: 'free' },
+  { id: 'google/gemma-3-4b-it:free', name: 'Gemma 3 4B', tier: 'free' },
+  { id: 'meta-llama/llama-3.2-3b-instruct:free', name: 'Llama 3.2 3B Instruct', tier: 'free' },
+  { id: 'meta-llama/llama-3.3-70b-instruct:free', name: 'Llama 3.3 70B Instruct', tier: 'free' },
+  { id: 'mistralai/mistral-small-3.1-24b-instruct:free', name: 'Mistral Small 3.1 24B', tier: 'free' },
+  { id: 'qwen/qwen3-4b:free', name: 'Qwen3 4B', tier: 'free' },
+  { id: 'microsoft/phi-4:free', name: 'Phi-4', tier: 'free' },
   { id: 'openchat/openchat-7b:free', name: 'OpenChat 7B', tier: 'free' },
 ];
 
 export const FALLBACK_PAID_MODELS = [
+  { id: 'anthropic/claude-3.5-sonnet', name: 'Claude 3.5 Sonnet', tier: 'paid' },
+  { id: 'anthropic/claude-sonnet-4', name: 'Claude Sonnet 4', tier: 'paid' },
   { id: 'openai/gpt-4o-mini', name: 'GPT-4o Mini', tier: 'paid' },
   { id: 'openai/gpt-4o', name: 'GPT-4o', tier: 'paid' },
-  { id: 'anthropic/claude-3.5-sonnet', name: 'Claude 3.5 Sonnet', tier: 'paid' },
   { id: 'google/gemini-2.0-flash-001', name: 'Gemini 2.0 Flash', tier: 'paid' },
   { id: 'google/gemini-pro-1.5', name: 'Gemini 1.5 Pro', tier: 'paid' },
   { id: 'deepseek/deepseek-chat', name: 'DeepSeek Chat', tier: 'paid' },
+];
+
+export const FALLBACK_IMAGE_MODELS = [
   {
-    id: 'deepseek/deepseek-chat',
-    name: 'DeepSeek V3 (Coding & Chat)',
-    badge: 'Code / Ultra Fast',
-    context: '64k',
+    id: 'black-forest-labs/flux.1-schnell',
+    name: 'FLUX.1 Schnell',
+    tier: 'paid',
+    isImageModel: true,
+  },
+  {
+    id: 'black-forest-labs/flux.1-dev',
+    name: 'FLUX.1 Dev',
+    tier: 'paid',
+    isImageModel: true,
+  },
+  {
+    id: 'stabilityai/stable-diffusion-3.5-large',
+    name: 'Stable Diffusion 3.5 Large',
+    tier: 'paid',
+    isImageModel: true,
   },
 ];
 
@@ -129,20 +151,68 @@ export function isPricingFree(pricing) {
   return Number.isFinite(prompt) && Number.isFinite(completion) && prompt === 0 && completion === 0;
 }
 
+/** Map OpenRouter USD-per-token pricing → VIP points ($1 = 1000 pts). */
+export function mapPricingToPoints(pricing) {
+  const promptUsd = Number.parseFloat(pricing?.prompt);
+  const completionUsd = Number.parseFloat(pricing?.completion);
+  const prompt = Number.isFinite(promptUsd) ? promptUsd : 0;
+  const completion = Number.isFinite(completionUsd) ? completionUsd : 0;
+  const isFree = prompt === 0 && completion === 0;
+  return {
+    prompt_usd: prompt,
+    completion_usd: completion,
+    prompt_points_per_1m: Math.max(0, Math.round(prompt * 1_000_000 * 1000)),
+    completion_points_per_1m: Math.max(0, Math.round(completion * 1_000_000 * 1000)),
+    isFree,
+  };
+}
+
 export function isFreeCatalogModel(model) {
   if (!model?.id) return false;
+  if (model.isFree === true) return true;
   if (String(model.id).endsWith(':free')) return true;
   if (isPricingFree(model.pricing)) return true;
   if (model.tier === 'free') return true;
   return isFreeAiModel(model.id, model.name);
 }
 
+/** Detect image-generation models via architecture or slug. */
+export function isImageGenerationModel(modelOrId) {
+  if (!modelOrId) return false;
+  if (typeof modelOrId === 'string') {
+    return IMAGE_MODEL_RE.test(modelOrId);
+  }
+  const id = String(modelOrId.id || '').toLowerCase();
+  const name = String(modelOrId.name || '').toLowerCase();
+  const desc = String(modelOrId.description || '').toLowerCase();
+  const label = `${id} ${name} ${desc}`;
+
+  const arch = modelOrId.architecture || {};
+  const outMods = (arch.output_modalities || []).map((m) => String(m).toLowerCase());
+  const inMods = (arch.input_modalities || []).map((m) => String(m).toLowerCase());
+
+  if (outMods.includes('image')) {
+    if (!outMods.includes('text') || IMAGE_MODEL_RE.test(label)) return true;
+  }
+  if (IMAGE_MODEL_RE.test(label)) return true;
+  if (
+    inMods.includes('text') &&
+    outMods.includes('image') &&
+    !/instruct|chat|llm|claude|gpt|gemini/i.test(label)
+  ) {
+    return true;
+  }
+  return false;
+}
+
 /**
- * Exclude embedding-only, agentic-harness-only, vision/image-output-only,
- * and other models that break plain text chat.
+ * Exclude embedding-only, agentic-harness-only, and other non-chat models.
+ * Image-gen models are handled separately via isImageGenerationModel.
  */
 export function isChatCompatibleModel(model) {
   if (!model?.id) return false;
+  if (isImageGenerationModel(model)) return false;
+
   const id = String(model.id).toLowerCase();
   const name = String(model.name || '').toLowerCase();
   const desc = String(model.description || '').toLowerCase();
@@ -164,22 +234,15 @@ export function isChatCompatibleModel(model) {
   if (outMods.includes('image') && !outMods.includes('text')) return false;
   if (outMods.includes('audio') && !outMods.includes('text')) return false;
 
-  // Vision-only / image-gen only (no text input)
   if (inMods.length && !inMods.includes('text') && (inMods.includes('image') || inMods.includes('file'))) {
     return false;
   }
 
-  if (/\b(flux|recraft|dall-?e|stable.?diffusion|sdxl|imagen)\b/.test(label) && !/instruct|chat|llm/i.test(label)) {
-    return false;
-  }
-
   if (id === OPENROUTER_FREE_ROUTER_ID) return true;
-  // Other /free aliases that are not real chat endpoints
   if (id.endsWith('/free') && id.split('/').length === 2 && !id.includes(':')) {
     return false;
   }
 
-  // Moderation / classifier utilities
   if (/\bmoderat(ion|e)\b|\bclassif(y|ier)\b/.test(label)) return false;
 
   return true;
@@ -204,48 +267,67 @@ export function modelTier(modelId, modelName = '', pricing) {
 export function normalizeOpenRouterModel(raw) {
   if (!raw?.id) return null;
   const id = String(raw.id);
+  const isImageModel = isImageGenerationModel(raw);
   const tier = modelTier(id, raw.name, raw.pricing);
   const name = cleanModelName(raw.name, id);
+  const points = mapPricingToPoints(raw.pricing);
+  const isFree = points.isFree || tier === 'free' || String(id).endsWith(':free');
   return {
     id,
     name,
     provider: inferProvider(id, raw.name),
     context_length: raw.context_length || raw.top_provider?.context_length || null,
-    tier,
+    tier: isFree ? 'free' : tier,
+    isFree,
+    isImageModel,
     isRouter: id === OPENROUTER_FREE_ROUTER_ID,
-    pricing: raw.pricing || null,
+    pricing: {
+      ...(raw.pricing || {}),
+      points,
+    },
     architecture: raw.architecture || null,
     description: raw.description || '',
   };
 }
 
 /**
- * Categorize OpenRouter catalog into chat-safe free + paid lists.
+ * Categorize OpenRouter catalog into chat-safe free + paid + image lists.
  */
 export function categorizeOpenRouterModels(rawList = []) {
   const free = [];
   const paid = [];
+  const image = [];
   const seen = new Set();
 
   for (const raw of rawList) {
     const m = normalizeOpenRouterModel(raw);
     if (!m || seen.has(m.id)) continue;
-    if (!isChatCompatibleModel(raw) && !isChatCompatibleModel(m)) continue;
     seen.add(m.id);
 
-    if (isFreeCatalogModel(m) || m.tier === 'free') {
-      free.push({ ...m, tier: 'free' });
+    if (m.isImageModel || isImageGenerationModel(raw)) {
+      image.push({ ...m, isImageModel: true });
+      continue;
+    }
+
+    if (!isChatCompatibleModel(raw) && !isChatCompatibleModel(m)) continue;
+
+    if (isFreeCatalogModel(m) || m.tier === 'free' || m.isFree) {
+      free.push({ ...m, tier: 'free', isFree: true });
     } else {
-      paid.push({ ...m, tier: 'paid' });
+      paid.push({ ...m, tier: 'paid', isFree: false });
     }
   }
 
   free.sort((a, b) => (a.name || a.id).localeCompare(b.name || b.id));
   paid.sort((a, b) => (a.name || a.id).localeCompare(b.name || b.id));
+  image.sort((a, b) => (a.name || a.id).localeCompare(b.name || b.id));
 
-  const freeWithRouter = [OPENROUTER_FREE_AUTO, ...free.filter((m) => m.id !== OPENROUTER_FREE_ROUTER_ID)];
+  const freeWithRouter = [
+    OPENROUTER_FREE_AUTO,
+    ...free.filter((m) => m.id !== OPENROUTER_FREE_ROUTER_ID),
+  ];
 
-  return { free: freeWithRouter, paid };
+  return { free: freeWithRouter, paid, image };
 }
 
 export function pickDefaultModel(freeList = []) {
@@ -254,6 +336,8 @@ export function pickDefaultModel(freeList = []) {
   if (freeList.some((m) => m.id === DEFAULT_FREE_MODEL_ID)) return DEFAULT_FREE_MODEL_ID;
 
   const prefer = [
+    /^deepseek\/.*:free$/i,
+    /^google\/gemini.*:free$/i,
     /^meta-llama\/llama-3\.2-.*:free$/i,
     /^meta-llama\/llama-3\.3-.*:free$/i,
     /^meta-llama\/.*:free$/i,
@@ -268,27 +352,43 @@ export function pickDefaultModel(freeList = []) {
   return freeList[0].id;
 }
 
-export function getFallbackCatalog() {
-  const free = [
-    { ...OPENROUTER_FREE_AUTO },
-    ...FALLBACK_FREE_MODELS.map((m) => ({
-      ...m,
-      name: cleanModelName(m.name, m.id),
-      provider: inferProvider(m.id, m.name),
-      context_length: m.context_length || null,
-      isRouter: false,
-    })),
-  ];
-  const paid = FALLBACK_PAID_MODELS.map((m) => ({
+function decorateFallback(m, extras = {}) {
+  const points = mapPricingToPoints(m.pricing || { prompt: '0', completion: '0' });
+  const isImageModel = Boolean(m.isImageModel || extras.isImageModel);
+  const isFree = m.tier === 'free' || points.isFree || String(m.id).endsWith(':free');
+  return {
     ...m,
     name: cleanModelName(m.name, m.id),
     provider: inferProvider(m.id, m.name),
     context_length: m.context_length || null,
     isRouter: false,
-  }));
+    isFree,
+    isImageModel,
+    pricing: { ...(m.pricing || {}), points },
+    ...extras,
+  };
+}
+
+export function getFallbackCatalog() {
+  const free = [
+    { ...OPENROUTER_FREE_AUTO },
+    ...FALLBACK_FREE_MODELS.map((m) => decorateFallback(m, { isFree: true, isImageModel: false })),
+  ];
+  const paid = FALLBACK_PAID_MODELS.map((m) =>
+    decorateFallback({ ...m, pricing: { prompt: '0.000003', completion: '0.000015' } }, {
+      isFree: false,
+      isImageModel: false,
+    })
+  );
+  const image = FALLBACK_IMAGE_MODELS.map((m) =>
+    decorateFallback({ ...m, pricing: { prompt: '0.00002', completion: '0' } }, {
+      isImageModel: true,
+    })
+  );
   return {
     free,
     paid,
+    image,
     source: 'fallback',
   };
 }
