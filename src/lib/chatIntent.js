@@ -7,10 +7,13 @@ const QUESTION_PREFIX_RE =
   /^(can\s+you|could\s+you|would\s+you|will\s+you|do\s+you|does\s+it|is\s+it|are\s+you|how\s+(do|can|to|would)|what\s+(is|are|do|can)|why\s+|when\s+|where\s+|help\s+me|please\s+help|tell\s+me|explain|هل\s+|هل تستطيع|كيف|ماذا|هل يمكنك|ئایا\s+|دەتوانی|دەتوانیت|چۆن\s+|چى\s+|چی\s+|یارمەتی)/i;
 
 const EDIT_INTENT_RE =
-  /\b(edit|retouch|photoshop|adjust|enhance|upscale|remove\s+background|bg\s*remove|inpaint|outpaint|fix\s+(my\s+)?(photo|image|pic)|modify\s+(my\s+)?(photo|image)|change\s+(my\s+)?(photo|image)|تحریر|تعديل|عدّل|عدل|حسّن|حسين|إزالة\s+الخلفية|گۆڕین|دەستکاری|چاککردن|سڕینەوەی\s+پاشبنەما)\b/i;
+  /\b(edit|retouch|photoshop|adjust|enhance|upscale|remove\s+background|bg\s*remove|inpaint|outpaint|fix\s+(my\s+)?(photo|image|pic)|modify\s+(my\s+)?(photo|image)|change\s+(my\s+)?(photo|image|back|background|color|colour|hair)|recolor|re-?colour|make\s+(it|my|the)\s+.{0,20}(red|blue|green|black|white)|تحریر|تعديل|عدّل|عدل|حسّن|حسين|إزالة\s+الخلفية|گۆڕین|دەستکاری|چاککردن|سڕینەوەی\s+پاشبنەما|ڕەنگ)\b/i;
 
 const PHOTO_TOPIC_RE =
-  /\b(photo|image|picture|pic|illustration|artwork|draw|drawing|generate|وێنە|صورة|صور|رسم|توضیح)\b/i;
+  /\b(photo|image|picture|pic|illustration|artwork|draw|drawing|generate|back|background|وێنە|صورة|صور|رسم|توضیح|پاشبنەما)\b/i;
+
+const PIXEL_EDIT_RE =
+  /\b(recolor|re-?colour|change\s+(?:my\s+|the\s+)?(?:back|background|color|colour|hair|sky|shirt|dress)|make\s+(?:it|my|the)\s+.{0,24}(?:red|blue|green|black|white|yellow|pink|purple)|to\s+(?:red|blue|green|black|white)|گۆڕینی\s*ڕەنگ|ڕەنگ\s*(?:بکە|بگۆڕە)|پاشبنەما\s*بگۆڕە)\b/i;
 
 /** Explicit imperative generation commands (not questions). */
 const EXPLICIT_GENERATE_RE =
@@ -65,7 +68,20 @@ export function isCapabilityOrHelpQuestion(prompt) {
 export function isImageEditIntent(prompt) {
   const text = normalizePromptText(prompt);
   if (!text) return false;
+  if (PIXEL_EDIT_RE.test(text)) return true;
   return EDIT_INTENT_RE.test(text) && PHOTO_TOPIC_RE.test(text);
+}
+
+/**
+ * User wants direct pixel photo edits (recolor / change background, etc.)
+ * — not a capability question and not a generate-new-image command.
+ */
+export function isPixelPhotoEditRequest(prompt) {
+  const text = normalizePromptText(prompt);
+  if (!text) return false;
+  if (isCapabilityOrHelpQuestion(text)) return false;
+  if (isExplicitImageGenerationCommand(text)) return false;
+  return PIXEL_EDIT_RE.test(text) || isImageEditIntent(text);
 }
 
 /**
@@ -124,6 +140,18 @@ export function detectChatIntent({ prompt, modelIsImage, messages }) {
   const capabilityQ = isCapabilityOrHelpQuestion(text);
   const editIntent = isImageEditIntent(text);
   const explicitGenerate = isExplicitImageGenerationCommand(text);
+  const pixelEdit = isPixelPhotoEditRequest(text);
+
+  // Text/vision models cannot do direct pixel edits — polite Kurdish notice
+  if (!modelIsImage && pixelEdit) {
+    return {
+      kind: 'pixel_edit_unsupported',
+      hasImage,
+      capabilityQ,
+      editIntent,
+      explicitGenerate,
+    };
+  }
 
   // Clear edit command without an attachment (not a "can you...?" question)
   if (editIntent && !hasImage && !explicitGenerate && !capabilityQ) {

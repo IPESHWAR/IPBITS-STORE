@@ -7,6 +7,13 @@ import {
   shouldTriggerImageGeneration,
 } from '@/lib/chatIntent';
 import {
+  extractOpenRouterErrorMessage,
+  friendlyOpenRouterErrorKu,
+  parseRecommendedPaidSlug,
+  PIXEL_EDIT_NOTICE_KU,
+  toPaidModelSlug,
+} from '@/lib/chatOpenRouterErrors';
+import {
   IMAGE_MODEL_HELP_SYSTEM_PROMPT,
   TEXT_ONLY_SYSTEM_PROMPT,
 } from '@/lib/chatStream';
@@ -221,6 +228,7 @@ function streamTextToClient({
   const encoder = new TextEncoder();
   let full = '';
   let usage = null;
+  let streamError = '';
 
   const stream = new ReadableStream({
     async start(controller) {
@@ -235,17 +243,18 @@ function streamTextToClient({
       send({ type: 'meta', model: chatModel, intent, is_image: false });
 
       if (!upstream?.ok || !upstream.body) {
-        let errMsg = 'ئاریشەیەک هەیە د کلیلێ یان باڵانسی دا';
+        let raw = '';
         try {
           const errData = await upstream.json();
-          errMsg = errData?.error?.message || errMsg;
+          raw = extractOpenRouterErrorMessage(errData);
         } catch {
           /* ignore */
         }
+        const errMsg = friendlyOpenRouterErrorKu(raw);
         send({ type: 'error', error: errMsg });
         send({
           type: 'done',
-          reply: '',
+          reply: errMsg,
           points_spent: 0,
           cost_usd: 0,
           remaining_points: userProfile?.points ?? null,
@@ -270,14 +279,18 @@ function streamTextToClient({
           const lines = buffer.split('\n');
           buffer = lines.pop() || '';
 
-          for (const raw of lines) {
-            const line = raw.trim();
+          for (const rawLine of lines) {
+            const line = rawLine.trim();
             if (!line || line.startsWith(':')) continue;
             if (!line.startsWith('data:')) continue;
             const payload = line.slice(5).trim();
             if (!payload || payload === '[DONE]') continue;
             try {
               const json = JSON.parse(payload);
+              if (json.error) {
+                streamError = extractOpenRouterErrorMessage(json);
+                continue;
+              }
               if (json.usage) usage = json.usage;
               const token = json.choices?.[0]?.delta?.content;
               if (typeof token === 'string' && token) {
@@ -290,7 +303,25 @@ function streamTextToClient({
           }
         }
       } catch (err) {
-        send({ type: 'error', error: err?.message || 'stream_failed' });
+        streamError = err?.message || 'stream_failed';
+      }
+
+      if (!full && streamError) {
+        const errMsg = friendlyOpenRouterErrorKu(streamError);
+        send({ type: 'error', error: errMsg });
+        send({
+          type: 'done',
+          reply: errMsg,
+          points_spent: 0,
+          cost_usd: 0,
+          remaining_points: userProfile?.points ?? null,
+          model: chatModel,
+          intent,
+          error: errMsg,
+        });
+        controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+        controller.close();
+        return;
       }
 
       const { costUsd, pointsSpent } = computeCostAndPoints(usage, chatModel);
@@ -322,6 +353,60 @@ function streamTextToClient({
   });
 
   return sseResponse(stream);
+}
+
+/**
+ * Start a streamed chat; if free model is unavailable, auto-retry paid slug.
+ * Points are charged for the model that actually succeeds (paid after fallback).
+ */
+async function openRouterStreamWithPaidFallback({
+  apiKey,
+  model,
+  messages,
+  modalities,
+}) {
+  let chatModel = String(model || '').trim();
+  let { response } = await callOpenRouter({
+    apiKey,
+    model: chatModel,
+    messages,
+    modalities,
+    stream: true,
+  });
+
+  if (response.ok) {
+    return { response, chatModel, fellBack: false };
+  }
+
+  const errData = await response.json().catch(() => ({}));
+  const errMsg = extractOpenRouterErrorMessage(errData);
+  let paidSlug = parseRecommendedPaidSlug(errMsg, chatModel);
+
+  if (!paidSlug && String(chatModel).endsWith(':free')) {
+    paidSlug = toPaidModelSlug(chatModel);
+  }
+
+  if (paidSlug && paidSlug !== chatModel) {
+    const retry = await callOpenRouter({
+      apiKey,
+      model: paidSlug,
+      messages,
+      modalities,
+      stream: true,
+    });
+    if (retry.response.ok) {
+      return { response: retry.response, chatModel: paidSlug, fellBack: true };
+    }
+    const err2 = await retry.response.json().catch(() => ({}));
+    return {
+      response: null,
+      chatModel: paidSlug,
+      fellBack: true,
+      errorMessage: extractOpenRouterErrorMessage(err2) || errMsg,
+    };
+  }
+
+  return { response: null, chatModel, fellBack: false, errorMessage: errMsg };
 }
 
 export async function POST(req) {
@@ -369,7 +454,21 @@ export async function POST(req) {
     // Instant fixed reply (no model wait)
     if (intent.kind === 'edit_needs_upload') {
       return sseOneShot({
-        reply: editNeedsUploadReply(),
+        reply: editNeedsUploadReply('ku'),
+        usage: null,
+        cost_usd: 0,
+        points_spent: 0,
+        remaining_points: userProfile?.points ?? null,
+        is_image: false,
+        model: selectedModel,
+        intent: intent.kind,
+      });
+    }
+
+    // Text/vision cannot do direct pixel edits — Kurdish notice (no raw errors)
+    if (intent.kind === 'pixel_edit_unsupported') {
+      return sseOneShot({
+        reply: PIXEL_EDIT_NOTICE_KU,
         usage: null,
         cost_usd: 0,
         points_spent: 0,
@@ -415,6 +514,28 @@ export async function POST(req) {
           const computed = computeCostAndPoints(usage, selectedModel);
           costUsd = computed.costUsd || 0.002;
           pointsSpent = Math.max(2, computed.pointsSpent);
+        } else {
+          const raw = extractOpenRouterErrorMessage(data);
+          const paidSlug = parseRecommendedPaidSlug(raw, selectedModel) || toPaidModelSlug(selectedModel);
+          if (paidSlug && paidSlug !== selectedModel) {
+            const retry = await callOpenRouter({
+              apiKey: activeApiKey,
+              model: paidSlug,
+              messages: imageMessages.length
+                ? imageMessages
+                : [{ role: 'user', content: promptText || 'Generate an image' }],
+              modalities: ['image', 'text'],
+              stream: false,
+            });
+            if (retry.response.ok) {
+              reply = normalizeAssistantContent(retry.data?.choices?.[0]?.message);
+              usage = retry.data?.usage || null;
+              usedModel = paidSlug;
+              const computed = computeCostAndPoints(usage, paidSlug);
+              costUsd = computed.costUsd || 0.002;
+              pointsSpent = Math.max(2, computed.pointsSpent);
+            }
+          }
         }
       } catch {
         reply = '';
@@ -447,7 +568,7 @@ export async function POST(req) {
       });
     }
 
-    // Streaming text path
+    // Streaming text path (auto free→paid slug fallback)
     let chatModel = selectedModel;
     if (isImageGenerationModel(selectedModel)) {
       chatModel =
@@ -460,20 +581,43 @@ export async function POST(req) {
         : TEXT_ONLY_SYSTEM_PROMPT;
 
     const outboundMessages = withSystemPrompt(messages, systemPrompt);
-    const { response: upstream } = await callOpenRouter({
+    const started = await openRouterStreamWithPaidFallback({
       apiKey: activeApiKey,
       model: chatModel,
       messages: outboundMessages,
-      stream: true,
     });
 
+    if (!started.response?.ok) {
+      const ku = friendlyOpenRouterErrorKu(started.errorMessage);
+      return sseOneShot({
+        reply: ku,
+        usage: null,
+        cost_usd: 0,
+        points_spent: 0,
+        remaining_points: userProfile?.points ?? null,
+        is_image: false,
+        model: started.chatModel || chatModel,
+        intent: intent.kind,
+      });
+    }
+
     return streamTextToClient({
-      upstream,
-      chatModel,
+      upstream: started.response,
+      chatModel: started.chatModel,
       intent: intent.kind,
       userProfile,
     });
   } catch (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    const ku = friendlyOpenRouterErrorKu(error?.message || '');
+    return sseOneShot({
+      reply: ku,
+      usage: null,
+      cost_usd: 0,
+      points_spent: 0,
+      remaining_points: null,
+      is_image: false,
+      model: 'unknown',
+      intent: 'error',
+    });
   }
 }
