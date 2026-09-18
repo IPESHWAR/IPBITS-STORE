@@ -277,7 +277,7 @@ export default function Navbar({ onOpenCatalog }) {
           aria-modal="true"
           aria-label={m.menu}
           dir={isRtl ? 'rtl' : 'ltr'}
-          className={`fixed top-0 bottom-0 ${panelSide} z-[101] w-full max-w-xs sm:max-w-sm h-full flex flex-col justify-start overflow-hidden p-5 bg-[#0B0F17] text-white shadow-2xl border-white/10 transform transition-all duration-200 ease-out ${
+          className={`fixed top-0 ${panelSide} z-[101] w-full max-w-xs sm:max-w-sm h-[100dvh] max-h-[100dvh] flex flex-col justify-between overflow-hidden pt-5 px-5 bg-[#0B0F17] text-white shadow-2xl border-white/10 transform transition-all duration-200 ease-out ${
             drawerVisible ? 'translate-x-0 opacity-100' : `${closedTranslate} opacity-0`
           }`}
         >
@@ -346,33 +346,36 @@ export default function Navbar({ onOpenCatalog }) {
                 <Moon className="w-4 h-4 text-zinc-300 shrink-0" />
               )}
             </button>
-
-            {/* Nav Links */}
-            <nav className="flex flex-col gap-1 pt-1" aria-label={m.menu}>
-              <a href="/#pricing" onClick={(e) => handleSectionClick(e, 'pricing')} className={`${NAV_ROW} text-start`}>
-                <span>{m.navOffer}</span>
-                <ChevronLeft className={`w-4 h-4 text-zinc-400 shrink-0 ${isRtl ? '' : 'rotate-180'}`} />
-              </a>
-
-              <a href="/#store" onClick={handleAllProducts} className={`${NAV_ROW} text-start`}>
-                <span>{m.allProducts}</span>
-                <ChevronLeft className={`w-4 h-4 text-zinc-400 shrink-0 ${isRtl ? '' : 'rotate-180'}`} />
-              </a>
-
-              <Link href="/chat" onClick={closeMenu} className={NAV_ROW}>
-                <span>{m.aiHub}</span>
-                <ChevronLeft className={`w-4 h-4 text-zinc-400 shrink-0 ${isRtl ? '' : 'rotate-180'}`} />
-              </Link>
-
-              <a href="/#faq" onClick={(e) => handleSectionClick(e, 'faq')} className={`${NAV_ROW} text-start`}>
-                <span>{m.navFaq}</span>
-                <ChevronLeft className={`w-4 h-4 text-zinc-400 shrink-0 ${isRtl ? '' : 'rotate-180'}`} />
-              </a>
-            </nav>
           </div>
 
+          {/* Middle nav — fills remaining space, scrolls if needed */}
+          <nav
+            className="flex-1 min-h-0 overflow-y-auto flex flex-col gap-1 py-3"
+            aria-label={m.menu}
+          >
+            <a href="/#pricing" onClick={(e) => handleSectionClick(e, 'pricing')} className={`${NAV_ROW} text-start`}>
+              <span>{m.navOffer}</span>
+              <ChevronLeft className={`w-4 h-4 text-zinc-400 shrink-0 ${isRtl ? '' : 'rotate-180'}`} />
+            </a>
+
+            <a href="/#store" onClick={handleAllProducts} className={`${NAV_ROW} text-start`}>
+              <span>{m.allProducts}</span>
+              <ChevronLeft className={`w-4 h-4 text-zinc-400 shrink-0 ${isRtl ? '' : 'rotate-180'}`} />
+            </a>
+
+            <Link href="/chat" onClick={closeMenu} className={NAV_ROW}>
+              <span>{m.aiHub}</span>
+              <ChevronLeft className={`w-4 h-4 text-zinc-400 shrink-0 ${isRtl ? '' : 'rotate-180'}`} />
+            </Link>
+
+            <a href="/#faq" onClick={(e) => handleSectionClick(e, 'faq')} className={`${NAV_ROW} text-start`}>
+              <span>{m.navFaq}</span>
+              <ChevronLeft className={`w-4 h-4 text-zinc-400 shrink-0 ${isRtl ? '' : 'rotate-180'}`} />
+            </a>
+          </nav>
+
           {/* Bottom Footer */}
-          <div className="mt-6 pt-4 border-t border-white/10 shrink-0">
+          <div className="pt-4 pb-[max(1.5rem,env(safe-area-inset-bottom))] border-t border-white/10 shrink-0">
             <a
               href={TELEGRAM_URL}
               target="_blank"
