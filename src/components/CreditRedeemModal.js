@@ -84,14 +84,14 @@ export default function CreditRedeemModal({
       }}
     >
       <div
-        className="relative w-full max-w-sm rounded-3xl border border-white/[0.08] bg-[#0c1018]/95 p-6 sm:p-7 shadow-2xl shadow-black/50 backdrop-blur-xl"
+        className="relative w-full max-w-sm rounded-3xl border border-slate-200 bg-white/95 text-slate-900 dark:border-white/[0.08] dark:bg-[#0c1018]/95 dark:text-white p-6 sm:p-7 shadow-2xl shadow-black/50 backdrop-blur-xl"
         onClick={(e) => e.stopPropagation()}
       >
         {closable && (
           <button
             type="button"
             onClick={onClose}
-            className="absolute top-4 start-4 text-white/40 hover:text-white/80 transition-colors cursor-pointer"
+            className="absolute top-4 start-4 text-slate-400 hover:text-slate-700 dark:text-white/40 dark:hover:text-white/80 transition-colors cursor-pointer"
             aria-label="Close"
           >
             <X size={16} />
@@ -99,11 +99,11 @@ export default function CreditRedeemModal({
         )}
 
         <div className="mb-5 flex flex-col items-center text-center">
-          <span className="mb-3 inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.03]">
-            <Lock size={18} className="text-amber-300/90" strokeWidth={1.75} />
+          <span className="mb-3 inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-slate-200 bg-slate-50 dark:border-white/10 dark:bg-white/[0.03]">
+            <Lock size={18} className="text-amber-500 dark:text-amber-300/90" strokeWidth={1.75} />
           </span>
-          <h2 className="text-[15px] font-semibold text-white/90 tracking-tight">{g.redeemTitle}</h2>
-          <p className="mt-2 text-xs leading-relaxed text-white/50 max-w-[16rem]">{g.redeemBody}</p>
+          <h2 className="text-[15px] font-semibold text-slate-900/90 dark:text-white/90 tracking-tight">{g.redeemTitle}</h2>
+          <p className="mt-2 text-xs leading-relaxed text-slate-500 dark:text-white/50 max-w-[16rem]">{g.redeemBody}</p>
         </div>
 
         <form onSubmit={redeem} className="space-y-3">
@@ -115,10 +115,10 @@ export default function CreditRedeemModal({
             autoFocus
             dir="ltr"
             spellCheck={false}
-            className="w-full rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3.5 text-center font-mono text-sm tracking-[0.14em] text-white placeholder:text-white/30 focus:border-white/30 focus:outline-none transition-colors"
+            className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3.5 text-center font-mono text-sm tracking-[0.14em] text-slate-900 placeholder:text-slate-400 dark:border-white/10 dark:bg-white/[0.03] dark:text-white dark:placeholder:text-white/30 focus:border-slate-400 dark:focus:border-white/30 focus:outline-none transition-colors"
           />
           {error ? (
-            <p className="rounded-xl border border-rose-500/20 bg-rose-500/[0.08] px-3 py-2 text-center text-[12px] text-rose-300">
+            <p className="rounded-xl border border-rose-500/20 bg-rose-500/[0.08] px-3 py-2 text-center text-[12px] text-rose-600 dark:text-rose-300">
               {error}
             </p>
           ) : null}
@@ -132,10 +132,10 @@ export default function CreditRedeemModal({
           </button>
         </form>
 
-        <p className="mt-4 text-center text-xs text-white/40">
+        <p className="mt-4 text-center text-xs text-slate-400 dark:text-white/40">
           <Link
             href="/#pricing"
-            className="font-medium text-sky-300/85 hover:text-sky-200 underline underline-offset-4"
+            className="font-medium text-sky-600 dark:text-sky-300/85 hover:text-sky-700 dark:hover:text-sky-200 underline underline-offset-4"
             onClick={onClose}
           >
             {g.gateBuyLink}

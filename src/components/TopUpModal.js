@@ -194,13 +194,13 @@ export default function TopUpModal() {
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.95 }}
             transition={{ duration: 0.2, ease: 'easeOut' }}
-            className="relative w-full sm:max-w-md bg-[#0d1020] border border-white/10 rounded-t-3xl sm:rounded-3xl shadow-2xl shadow-emerald-950/50 overflow-hidden max-h-[92vh] flex flex-col"
+            className="relative w-full sm:max-w-md bg-white border border-slate-200 text-slate-900 dark:bg-[#0d1020] dark:border-teal-400/25 dark:text-white rounded-t-3xl sm:rounded-3xl shadow-2xl shadow-emerald-950/50 overflow-hidden max-h-[92vh] flex flex-col"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="relative flex items-center justify-between gap-3 px-5 sm:px-6 py-4 border-b border-white/8">
+            <div className="relative flex items-center justify-between gap-3 px-5 sm:px-6 py-4 border-b border-slate-200 dark:border-white/8">
               <div className="flex items-center gap-2 min-w-0">
-                <Wallet className="text-emerald-400 shrink-0" size={18} />
-                <h2 className="font-black text-base text-white truncate">
+                <Wallet className="text-emerald-500 dark:text-emerald-400 shrink-0" size={18} />
+                <h2 className="font-black text-base text-slate-900 dark:text-white truncate">
                   {historyOpen ? w.historyTitle : w.title}
                 </h2>
               </div>
@@ -210,7 +210,7 @@ export default function TopUpModal() {
                   closeTopUp();
                   closeHistory();
                 }}
-                className="w-8 h-8 inline-flex items-center justify-center rounded-xl bg-white/5 border border-white/10 text-slate-300 hover:text-white cursor-pointer"
+                className="w-8 h-8 inline-flex items-center justify-center rounded-xl bg-slate-100 border border-slate-200 text-slate-500 hover:text-slate-900 dark:bg-white/5 dark:border-white/10 dark:text-slate-300 dark:hover:text-white cursor-pointer"
                 aria-label={s.closeBtn}
                 title={s.closeBtn}
               >
@@ -220,22 +220,22 @@ export default function TopUpModal() {
 
             <div className="relative p-5 sm:p-6 overflow-y-auto space-y-4">
               {toast && (
-                <div className="rounded-xl border border-emerald-500/40 bg-emerald-500/15 px-3 py-2.5 text-[11px] font-black text-emerald-200 text-center animate-fade-up">
+                <div className="rounded-xl border border-emerald-500/40 bg-emerald-500/15 px-3 py-2.5 text-[11px] font-black text-emerald-700 dark:text-emerald-200 text-center animate-fade-up">
                   {toast}
                 </div>
               )}
 
-              <div className="rounded-2xl border border-emerald-500/25 bg-gradient-to-br from-emerald-950/40 via-slate-950/80 to-emerald-950/40 p-3.5">
-                <p className="text-[10px] font-bold text-emerald-300 mb-0.5">{w.availableBalance}</p>
-                <p className="text-xl font-black text-white">
+              <div className="rounded-2xl border border-emerald-500/25 bg-gradient-to-br from-emerald-50 via-slate-50 to-emerald-50 dark:from-emerald-950/40 dark:via-slate-950/80 dark:to-emerald-950/40 p-3.5">
+                <p className="text-[10px] font-bold text-emerald-600 dark:text-emerald-300 mb-0.5">{w.availableBalance}</p>
+                <p className="text-xl font-black text-slate-900 dark:text-white">
                   {formatPrice(lang, balanceIqd, balanceUsd)}
                 </p>
                 {phone && <p className="text-[10px] text-slate-500 mt-1 font-mono truncate">{phone}</p>}
               </div>
 
-              {!historyOpen && <p className="text-[11px] text-slate-400 leading-relaxed">{w.subtitle}</p>}
+              {!historyOpen && <p className="text-[11px] text-slate-600 dark:text-slate-400 leading-relaxed">{w.subtitle}</p>}
 
-              <div className="flex gap-1.5 p-1 rounded-xl bg-slate-950/70 border border-slate-800">
+              <div className="flex gap-1.5 p-1 rounded-xl bg-slate-100 border border-slate-200 dark:bg-slate-950/70 dark:border-slate-800">
                 <button
                   type="button"
                   onClick={() => {
@@ -243,7 +243,7 @@ export default function TopUpModal() {
                     setTab('packages');
                   }}
                   className={`flex-1 py-1.5 rounded-lg text-[11px] font-bold cursor-pointer transition-colors ${
-                    !historyOpen && tab === 'packages' ? 'bg-emerald-600 text-white' : 'text-slate-400 hover:text-white'
+                    !historyOpen && tab === 'packages' ? 'bg-emerald-600 text-white' : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'
                   }`}
                 >
                   {w.tabPackages}
@@ -255,7 +255,7 @@ export default function TopUpModal() {
                     setTab('voucher');
                   }}
                   className={`flex-1 py-1.5 rounded-lg text-[11px] font-bold cursor-pointer transition-colors ${
-                    !historyOpen && tab === 'voucher' ? 'bg-emerald-600 text-white' : 'text-slate-400 hover:text-white'
+                    !historyOpen && tab === 'voucher' ? 'bg-emerald-600 text-white' : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'
                   }`}
                 >
                   {w.tabVoucher}
@@ -264,7 +264,7 @@ export default function TopUpModal() {
                   type="button"
                   onClick={openHistory}
                   className={`flex-1 py-1.5 rounded-lg text-[11px] font-bold cursor-pointer transition-colors inline-flex items-center justify-center gap-1 ${
-                    historyOpen ? 'bg-emerald-600 text-white' : 'text-slate-400 hover:text-white'
+                    historyOpen ? 'bg-emerald-600 text-white' : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'
                   }`}
                 >
                   <History size={11} />
@@ -273,13 +273,13 @@ export default function TopUpModal() {
               </div>
 
               <div>
-                <label className="block text-[11px] font-semibold text-slate-300 mb-1.5">{w.phoneLabel}</label>
+                <label className="block text-[11px] font-semibold text-slate-700 dark:text-slate-300 mb-1.5">{w.phoneLabel}</label>
                 <input
                   type="text"
                   value={contactValue}
                   onChange={(e) => setContact(e.target.value)}
                   placeholder={w.phonePlaceholder}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-sm text-white placeholder:text-slate-600 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
+                  className="w-full bg-white text-slate-900 placeholder-slate-400 border border-slate-300 dark:bg-slate-950 dark:text-white dark:placeholder-slate-500 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
                 />
               </div>
 
@@ -291,15 +291,15 @@ export default function TopUpModal() {
                     transactions.map((tx) => (
                       <div
                         key={tx.id}
-                        className="flex items-center justify-between gap-2 rounded-xl border border-slate-800 bg-slate-950/60 px-3 py-2"
+                        className="flex items-center justify-between gap-2 rounded-xl border border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-950/60 px-3 py-2"
                       >
                         <div className="min-w-0">
-                          <p className="text-[11px] font-bold text-white truncate">{typeLabel(tx.type)}</p>
+                          <p className="text-[11px] font-bold text-slate-900 dark:text-white truncate">{typeLabel(tx.type)}</p>
                           <p className="text-[10px] text-slate-500 truncate">{tx.description}</p>
                         </div>
                         <span
                           className={`text-xs font-black shrink-0 ${
-                            tx.amount_iqd > 0 ? 'text-emerald-400' : 'text-rose-300'
+                            tx.amount_iqd > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-500 dark:text-rose-300'
                           }`}
                         >
                           {tx.amount_iqd > 0 ? '+' : ''}
@@ -311,7 +311,7 @@ export default function TopUpModal() {
                 </div>
               ) : tab === 'voucher' ? (
                 <div className="space-y-3">
-                  <label className="block text-[11px] font-semibold text-slate-300">{w.voucherLabel}</label>
+                  <label className="block text-[11px] font-semibold text-slate-700 dark:text-slate-300">{w.voucherLabel}</label>
                   <input
                     type="text"
                     value={voucher}
@@ -324,7 +324,7 @@ export default function TopUpModal() {
                     }}
                     placeholder={w.voucherPlaceholder}
                     disabled={voucherLoading}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-sm text-white placeholder:text-slate-600 font-mono focus:border-emerald-500 disabled:opacity-60"
+                    className="w-full bg-white text-slate-900 placeholder-slate-400 border border-slate-300 dark:bg-slate-950 dark:text-white dark:placeholder-slate-500 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-sm font-mono focus:border-emerald-500 disabled:opacity-60"
                   />
                   <button
                     type="button"
@@ -351,15 +351,15 @@ export default function TopUpModal() {
                           }}
                           className={`p-3 rounded-2xl border text-start cursor-pointer transition-all ${
                             active
-                              ? 'bg-emerald-600/20 border-emerald-400 ring-2 ring-emerald-500'
-                              : 'bg-slate-950/60 border-slate-800 hover:border-slate-700'
+                              ? 'bg-emerald-50 border-emerald-400 ring-2 ring-emerald-500 dark:bg-emerald-600/20'
+                              : 'bg-slate-50 border-slate-200 hover:border-slate-300 dark:bg-slate-950/60 dark:border-slate-800 dark:hover:border-slate-700'
                           }`}
                         >
-                          <span className="block text-sm font-black text-white">
+                          <span className="block text-sm font-black text-slate-900 dark:text-white">
                             {p.amountIqd.toLocaleString()} IQD
                           </span>
-                          <span className="text-[10px] text-slate-400">${p.amountUsd.toFixed(2)}</span>
-                          {active && <Check className="text-emerald-400 mt-1" size={12} />}
+                          <span className="text-[10px] text-slate-500 dark:text-slate-400">${p.amountUsd.toFixed(2)}</span>
+                          {active && <Check className="text-emerald-500 dark:text-emerald-400 mt-1" size={12} />}
                         </button>
                       );
                     })}
@@ -370,10 +370,10 @@ export default function TopUpModal() {
                     value={customIqd}
                     onChange={(e) => setCustomIqd(e.target.value)}
                     placeholder={w.customAmount}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-sm text-white placeholder:text-slate-600 focus:border-emerald-500"
+                    className="w-full bg-white text-slate-900 placeholder-slate-400 border border-slate-300 dark:bg-slate-950 dark:text-white dark:placeholder-slate-500 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-sm focus:border-emerald-500"
                   />
 
-                  <p className="text-[11px] font-bold text-slate-300">{s.checkoutStep2Title}</p>
+                  <p className="text-[11px] font-bold text-slate-700 dark:text-slate-300">{s.checkoutStep2Title}</p>
                   <div className="grid grid-cols-3 gap-2">
                     {PAYMENT_METHODS.map((m) => {
                       const active = paymentMethod === m.id;
@@ -385,15 +385,15 @@ export default function TopUpModal() {
                           onClick={() => setPaymentMethod(m.id)}
                           className={`p-2.5 rounded-2xl border flex flex-col items-center gap-1.5 cursor-pointer ${
                             active
-                              ? 'bg-emerald-600/20 border-emerald-400 ring-2 ring-emerald-500'
-                              : 'bg-slate-950/60 border-slate-800'
+                              ? 'bg-emerald-50 border-emerald-400 ring-2 ring-emerald-500 dark:bg-emerald-600/20'
+                              : 'bg-slate-50 border-slate-200 dark:bg-slate-950/60 dark:border-slate-800'
                           }`}
                         >
                           <span className="w-9 h-9 rounded-xl bg-white flex items-center justify-center p-1">
                             {/* eslint-disable-next-line @next/next/no-img-element */}
                             <img src={m.logo} alt={label} className="w-full h-full object-contain" />
                           </span>
-                          <span className="text-[9px] font-bold text-slate-300 text-center leading-tight">{label}</span>
+                          <span className="text-[9px] font-bold text-slate-700 dark:text-slate-300 text-center leading-tight">{label}</span>
                         </button>
                       );
                     })}
@@ -418,12 +418,12 @@ export default function TopUpModal() {
               )}
 
               {error && (
-                <div className="bg-rose-500/10 border border-rose-500/30 text-rose-300 text-[11px] font-bold rounded-xl px-3 py-2 text-center">
+                <div className="bg-rose-500/10 border border-rose-500/30 text-rose-600 dark:text-rose-300 text-[11px] font-bold rounded-xl px-3 py-2 text-center">
                   {error}
                 </div>
               )}
               {success && (
-                <div className="bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-[11px] font-bold rounded-xl px-3 py-2 text-center">
+                <div className="bg-emerald-500/10 border border-emerald-500/30 text-emerald-700 dark:text-emerald-300 text-[11px] font-bold rounded-xl px-3 py-2 text-center">
                   {success}
                 </div>
               )}

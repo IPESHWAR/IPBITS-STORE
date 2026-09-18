@@ -7,7 +7,7 @@ import { useLanguage } from '@/components/LanguageProvider';
 import { useHoverDropdown } from '@/hooks/useHoverDropdown';
 
 const PILL_BTN =
-  'inline-flex items-center justify-center gap-1.5 h-9 px-3.5 text-xs tracking-wide rounded-full backdrop-blur-md bg-white/[0.04] border border-white/10 text-zinc-300 hover:border-cyan-400/40 hover:text-white transition-all duration-200 ease-out active:scale-[0.97] cursor-pointer';
+  'inline-flex items-center justify-center gap-1.5 h-9 px-3.5 text-xs tracking-wide rounded-full backdrop-blur-md bg-white border border-slate-200 text-slate-700 hover:border-slate-300 hover:text-slate-900 dark:bg-white/[0.04] dark:border-white/10 dark:text-zinc-300 dark:hover:border-cyan-400/40 dark:hover:text-white transition-all duration-200 ease-out active:scale-[0.97] cursor-pointer';
 
 export default function LanguageSwitcher({
   compact = false,
@@ -56,10 +56,10 @@ export default function LanguageSwitcher({
             ? `${PILL_BTN} w-9 px-0`
             : pill
               ? PILL_BTN
-              : 'flex items-center gap-1.5 bg-slate-900/80 hover:bg-slate-800 border border-slate-800/90 hover:border-cyan-500/40 text-slate-200 px-2.5 py-1.5 rounded-xl text-xs font-bold transition-all duration-200 ease-out cursor-pointer shadow-sm active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/60'
+              : 'flex items-center gap-1.5 bg-white hover:bg-slate-50 border border-slate-200 hover:border-slate-300 text-slate-700 dark:bg-slate-900/80 dark:hover:bg-slate-800 dark:border-slate-800/90 dark:hover:border-cyan-500/40 dark:text-slate-200 px-2.5 py-1.5 rounded-xl text-xs font-bold transition-all duration-200 ease-out cursor-pointer shadow-sm active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/60'
         }
       >
-        <Globe size={14} className={iconOnly ? 'text-zinc-300 shrink-0' : 'text-cyan-400 shrink-0'} />
+        <Globe size={14} className={iconOnly ? 'text-slate-600 dark:text-zinc-300 shrink-0' : 'text-cyan-600 dark:text-cyan-400 shrink-0'} />
         {!iconOnly && (
           <>
             <span className="whitespace-nowrap" suppressHydrationWarning>
@@ -67,7 +67,7 @@ export default function LanguageSwitcher({
             </span>
             <ChevronDown
               size={12}
-              className={`text-zinc-500 transition-transform duration-200 ${open ? 'rotate-180' : ''}`}
+              className={`text-slate-400 dark:text-zinc-500 transition-transform duration-200 ${open ? 'rotate-180' : ''}`}
             />
           </>
         )}
@@ -76,7 +76,7 @@ export default function LanguageSwitcher({
       {mounted && (
         <div
           role="listbox"
-          className={`absolute top-full mt-1.5 bg-[#0c1022]/95 border border-slate-800 rounded-xl shadow-2xl shadow-emerald-950/40 p-1 z-50 flex flex-col gap-0.5 min-w-[118px] backdrop-blur-xl transition-all duration-150 ${
+          className={`absolute top-full mt-1.5 bg-white border border-slate-200 dark:bg-[#0c1022]/95 dark:border-slate-800 rounded-xl shadow-2xl shadow-emerald-950/40 p-1 z-50 flex flex-col gap-0.5 min-w-[118px] backdrop-blur-xl transition-all duration-150 ${
             iconOnly || isRtl ? 'end-0' : 'start-0'
           } ${
             open
@@ -96,12 +96,12 @@ export default function LanguageSwitcher({
               }}
               className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center justify-between cursor-pointer ${
                 lang === item.id
-                  ? 'bg-emerald-600/30 text-cyan-300'
-                  : 'text-slate-300 hover:bg-slate-900 hover:text-white'
+                  ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-600/30 dark:text-cyan-300'
+                  : 'text-slate-700 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-900 dark:hover:text-white'
               }`}
             >
               <span>{item.label}</span>
-              {lang === item.id && <Check size={12} className="text-cyan-400" />}
+              {lang === item.id && <Check size={12} className="text-emerald-600 dark:text-cyan-400" />}
             </button>
           ))}
         </div>

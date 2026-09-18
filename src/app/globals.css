@@ -32,6 +32,26 @@ html {
 
 html.light-mode {
   color-scheme: light;
+  background: #f8fafc;
+}
+
+html.light-mode,
+html.light-mode body {
+  background: #f8fafc !important;
+  color: #0f172a !important;
+}
+
+html.light-mode h1,
+html.light-mode h2,
+html.light-mode h3,
+html.light-mode h4,
+html.light-mode h5,
+html.light-mode h6 {
+  color: #0f172a;
+}
+
+html.light-mode p {
+  color: #475569;
 }
 
 html,
@@ -511,9 +531,16 @@ button:focus-visible {
 .light-mode .bg-\[\#0a0b14\],
 .light-mode .bg-\[\#0a0d1a\],
 .light-mode .bg-\[\#0c1022\],
-.light-mode .bg-\[\#0d1117\] {
-  background-color: var(--bg-base) !important;
-  color: var(--text-primary) !important;
+.light-mode .bg-\[\#0c1018\],
+.light-mode .bg-\[\#0c1018\]\/95,
+.light-mode .bg-\[\#0d1117\],
+.light-mode .bg-\[\#0d1020\],
+.light-mode .bg-\[\#10131c\],
+.light-mode .bg-\[\#10131c\]\/80,
+.light-mode .bg-\[\#F8FAFC\],
+.light-mode .bg-\[\#f8fafc\] {
+  background-color: #f8fafc !important;
+  color: #0f172a !important;
 }
 
 /* Navbar */
@@ -657,6 +684,131 @@ button:focus-visible {
 
 .light-mode .text-white:not(.bg-clip-text) {
   color: #0f172a !important; /* slate-900 */
+}
+
+/* Opacity white text — not matched by .text-white alone */
+.light-mode .text-white\/95,
+.light-mode .text-white\/90,
+.light-mode .text-white\/85,
+.light-mode .text-white\/80,
+.light-mode .text-white\/75,
+.light-mode .text-white\/70 {
+  color: #0f172a !important;
+}
+
+.light-mode .text-white\/65,
+.light-mode .text-white\/60,
+.light-mode .text-white\/55,
+.light-mode .text-white\/50,
+.light-mode .text-white\/45,
+.light-mode .text-white\/40 {
+  color: #475569 !important; /* slate-600 */
+}
+
+.light-mode .text-white\/35,
+.light-mode .text-white\/30,
+.light-mode .text-white\/25,
+.light-mode .text-white\/20 {
+  color: #64748b !important; /* slate-500 */
+}
+
+.light-mode .placeholder-white\/40::placeholder,
+.light-mode .placeholder-white\/35::placeholder,
+.light-mode .placeholder-white\/30::placeholder,
+.light-mode .placeholder\:text-white\/40::placeholder,
+.light-mode .placeholder\:text-white\/35::placeholder,
+.light-mode .placeholder\:text-white\/30::placeholder {
+  color: #94a3b8 !important; /* slate-400 */
+}
+
+/* Cards / panels missing from earlier remaps */
+.light-mode .bg-slate-900\/95,
+.light-mode .bg-slate-950\/50,
+.light-mode .bg-slate-950\/80,
+.light-mode .bg-black\/40,
+.light-mode .bg-zinc-800\/60 {
+  background-color: #ffffff !important;
+}
+
+.light-mode .bg-zinc-800\/60 {
+  border-color: #e2e8f0 !important;
+}
+
+/* Form controls — high contrast light defaults */
+.light-mode input:not([type='checkbox']):not([type='radio']):not([type='range']),
+.light-mode textarea,
+.light-mode select {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+  border-color: #cbd5e1 !important;
+}
+
+.light-mode input::placeholder,
+.light-mode textarea::placeholder {
+  color: #94a3b8 !important;
+}
+
+.light-mode input:focus,
+.light-mode textarea:focus,
+.light-mode select:focus {
+  border-color: #14b8a6 !important;
+  outline-color: #14b8a6;
+}
+
+/* Keep primary CTA labels white on brand gradients */
+.light-mode .bg-gradient-to-r,
+.light-mode .bg-gradient-to-br,
+.light-mode .bg-gradient-to-l,
+.light-mode button[class*='from-cyan'],
+.light-mode button[class*='from-emerald'],
+.light-mode button[class*='from-sky'],
+.light-mode a[class*='from-cyan'],
+.light-mode a[class*='from-emerald'],
+.light-mode a[class*='from-sky'],
+.light-mode .bg-teal-600,
+.light-mode .bg-emerald-600,
+.light-mode .bg-cyan-600,
+.light-mode .bg-sky-600 {
+  color: #ffffff !important;
+}
+
+.light-mode .bg-gradient-to-r .text-white,
+.light-mode .bg-gradient-to-br .text-white,
+.light-mode .bg-teal-600 .text-white,
+.light-mode .bg-emerald-600 .text-white,
+.light-mode button.bg-teal-600,
+.light-mode a.bg-teal-600 {
+  color: #ffffff !important;
+}
+
+/* Modal/card surfaces — crisp white glass */
+.light-mode .backdrop-blur-md,
+.light-mode .backdrop-blur-xl,
+.light-mode .backdrop-blur-2xl {
+  background-color: rgba(255, 255, 255, 0.95) !important;
+}
+
+/* Exclude intentional dark mobile drawer from page remaps — keep readable invert */
+.light-mode #mobile-nav-drawer {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+  border-color: #e2e8f0 !important;
+}
+
+.light-mode #mobile-nav-drawer .text-white,
+.light-mode #mobile-nav-drawer .text-zinc-300,
+.light-mode #mobile-nav-drawer .text-zinc-400 {
+  color: #0f172a !important;
+}
+
+.light-mode #mobile-nav-drawer .border-white\/10 {
+  border-color: #e2e8f0 !important;
+}
+
+.light-mode #mobile-nav-drawer .bg-white\/\[0\.03\],
+.light-mode #mobile-nav-drawer .bg-white\/\[0\.04\],
+.light-mode #mobile-nav-drawer .bg-white\/\[0\.05\] {
+  background-color: #f8fafc !important;
 }
 
 .light-mode .shadow-\[0_4px_30px_rgba\(0\,0\,0\,0\.4\)\] {

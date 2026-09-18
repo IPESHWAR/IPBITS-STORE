@@ -65,7 +65,7 @@ export default function ProductPlanModal({ product, open, onClose, onConfirm }) 
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.95 }}
             transition={{ duration: 0.2, ease: 'easeOut' }}
-            className="relative w-full sm:max-w-md bg-[#0d1117]/95 border border-white/10 rounded-t-3xl sm:rounded-3xl shadow-2xl overflow-hidden max-h-[88vh] flex flex-col backdrop-blur-xl"
+            className="relative w-full sm:max-w-md bg-white/95 dark:bg-[#0d1117]/95 border border-slate-200 dark:border-white/10 rounded-t-3xl sm:rounded-3xl shadow-2xl overflow-hidden max-h-[88vh] flex flex-col backdrop-blur-xl"
             onClick={(event) => event.stopPropagation()}
           >
             <div
@@ -74,7 +74,7 @@ export default function ProductPlanModal({ product, open, onClose, onConfirm }) 
               aria-hidden="true"
             />
 
-            <div className="relative flex items-start justify-between gap-3 p-5 sm:p-6 border-b border-white/8">
+            <div className="relative flex items-start justify-between gap-3 p-5 sm:p-6 border-b border-slate-200 dark:border-white/8">
               <div className="flex items-center gap-3 min-w-0">
                 <ProductLogoBadge
                   name={product.name}
@@ -82,10 +82,10 @@ export default function ProductPlanModal({ product, open, onClose, onConfirm }) 
                   alt={product.name}
                 />
                 <div className="min-w-0">
-                  <h2 id="plan-modal-title" className="font-black text-base sm:text-lg text-white leading-tight truncate">
+                  <h2 id="plan-modal-title" className="font-black text-base sm:text-lg text-slate-900 dark:text-white leading-tight truncate">
                     {getProductName(product, lang)}
                   </h2>
-                  <span className="mt-1 block text-[11px] sm:text-xs text-zinc-400 dark:text-zinc-400 tracking-wide leading-snug">
+                  <span className="mt-1 block text-[11px] sm:text-xs text-slate-500 dark:text-zinc-400 tracking-wide leading-snug">
                     {getProductSubtitle(product, lang)}
                   </span>
                 </div>
@@ -93,7 +93,7 @@ export default function ProductPlanModal({ product, open, onClose, onConfirm }) 
               <button
                 type="button"
                 onClick={onClose}
-                className="w-8 h-8 inline-flex items-center justify-center rounded-xl bg-white/5 border border-white/10 text-slate-400 hover:text-white cursor-pointer transition-all duration-200 ease-out shrink-0"
+                className="w-8 h-8 inline-flex items-center justify-center rounded-xl bg-slate-100 border border-slate-200 text-slate-500 hover:text-slate-900 dark:bg-white/5 dark:border-white/10 dark:text-slate-400 dark:hover:text-white cursor-pointer transition-all duration-200 ease-out shrink-0"
                 aria-label={s.closeBtn}
               >
                 <X size={15} />
@@ -101,7 +101,7 @@ export default function ProductPlanModal({ product, open, onClose, onConfirm }) 
             </div>
 
             <div className="relative p-5 sm:p-6 space-y-4 overflow-y-auto">
-              <p className="text-xs font-bold text-slate-400">{s.selectDuration}</p>
+              <p className="text-xs font-bold text-slate-600 dark:text-slate-400">{s.selectDuration}</p>
               <div className="grid grid-cols-1 gap-2.5" role="radiogroup" aria-label={s.selectDuration}>
                 {plans.map((plan) => {
                   const active = plan.id === selected?.id;
@@ -114,25 +114,25 @@ export default function ProductPlanModal({ product, open, onClose, onConfirm }) 
                       onClick={() => setSelectedId(plan.id)}
                       className={`w-full text-start rounded-2xl px-4 py-3.5 border transition-all duration-200 ease-out cursor-pointer ${
                         active
-                          ? 'bg-cyan-500/10 border-cyan-400/60 shadow-[0_0_22px_rgba(34,211,238,0.22)]'
-                          : 'bg-slate-950/50 border-slate-800/80 hover:border-slate-600'
+                          ? 'bg-cyan-50 border-cyan-400/60 shadow-[0_0_22px_rgba(34,211,238,0.12)] dark:bg-cyan-500/10 dark:shadow-[0_0_22px_rgba(34,211,238,0.22)]'
+                          : 'bg-slate-50 border-slate-200 hover:border-slate-300 dark:bg-slate-950/50 dark:border-slate-800/80 dark:hover:border-slate-600'
                       }`}
                     >
                       <div className="flex items-center justify-between gap-3">
                         <div className="flex items-center gap-3 min-w-0">
                           <span
                             className={`w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 transition-all duration-200 ease-out ${
-                              active ? 'border-cyan-300' : 'border-slate-600'
+                              active ? 'border-cyan-500 dark:border-cyan-300' : 'border-slate-300 dark:border-slate-600'
                             }`}
                             aria-hidden="true"
                           >
-                            {active && <span className="w-2 h-2 rounded-full bg-cyan-300" />}
+                            {active && <span className="w-2 h-2 rounded-full bg-cyan-500 dark:bg-cyan-300" />}
                           </span>
-                          <span className={`text-sm font-bold truncate ${active ? 'text-white' : 'text-slate-200'}`}>
+                          <span className={`text-sm font-bold truncate ${active ? 'text-slate-900 dark:text-white' : 'text-slate-700 dark:text-slate-200'}`}>
                             {plan.duration || plan.name}
                           </span>
                         </div>
-                        <span className={`text-sm font-semibold shrink-0 ${active ? 'text-cyan-200' : 'text-white'}`}>
+                        <span className={`text-sm font-semibold shrink-0 ${active ? 'text-cyan-700 dark:text-cyan-200' : 'text-slate-900 dark:text-white'}`}>
                           {formatMoney(lang, plan)}
                         </span>
                       </div>
@@ -142,7 +142,7 @@ export default function ProductPlanModal({ product, open, onClose, onConfirm }) 
               </div>
             </div>
 
-            <div className="relative p-5 sm:p-6 pt-2 border-t border-white/8">
+            <div className="relative p-5 sm:p-6 pt-2 border-t border-slate-200 dark:border-white/8">
               <button
                 type="button"
                 onClick={() => selected && onConfirm?.(product, selected)}

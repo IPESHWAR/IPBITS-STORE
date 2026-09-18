@@ -31,7 +31,7 @@ const CARD_BUY_BTN =
   'w-full inline-flex items-center justify-center py-2.5 px-4 rounded-xl text-xs sm:text-sm font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 hover:border-emerald-300 dark:text-emerald-400 dark:bg-emerald-500/[0.06] dark:hover:bg-emerald-500/[0.14] dark:border-emerald-500/25 dark:hover:border-emerald-400/50 shadow-sm transition-all duration-150 ease-out active:scale-[0.96] cursor-pointer select-none';
 
 const CARD_SOON_BTN =
-  'w-full inline-flex items-center justify-center py-2.5 px-4 rounded-xl text-xs sm:text-sm font-semibold opacity-60 cursor-not-allowed bg-zinc-800/60 text-zinc-400 border border-zinc-700/50 hover:bg-zinc-800/60 select-none pointer-events-none';
+  'w-full inline-flex items-center justify-center py-2.5 px-4 rounded-xl text-xs sm:text-sm font-semibold opacity-60 cursor-not-allowed bg-slate-100 text-slate-500 border border-slate-200 dark:bg-zinc-800/60 dark:text-zinc-400 dark:border-zinc-700/50 hover:bg-slate-100 dark:hover:bg-zinc-800/60 select-none pointer-events-none';
 
 const PILL_BTN =
   'inline-flex items-center justify-center gap-1.5 h-9 px-3.5 text-xs tracking-wide rounded-full backdrop-blur-md border border-slate-300 dark:border-white/10 text-slate-800 dark:text-zinc-200 bg-white dark:bg-white/[0.03] hover:bg-slate-50 dark:hover:bg-white/[0.06] hover:border-slate-400 dark:hover:border-cyan-400/40 transition-all duration-150 ease-out active:scale-[0.96] cursor-pointer select-none';
@@ -1073,13 +1073,13 @@ export default function StorePage() {
       {/* Feature 3 — Notify Me Modal */}
       {notifyProduct && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm" onClick={() => { setNotifyProduct(null); setNotifyDone(false); setNotifyContact(''); }}>
-          <div className="relative w-full max-w-sm bg-slate-900/95 border border-slate-700/60 rounded-3xl p-6 shadow-2xl backdrop-blur-xl" onClick={e => e.stopPropagation()}>
-            <button type="button" onClick={() => { setNotifyProduct(null); setNotifyDone(false); setNotifyContact(''); }} className="absolute top-4 end-4 text-slate-500 hover:text-white cursor-pointer text-xl">×</button>
+          <div className="relative w-full max-w-sm bg-white/95 border border-slate-200 text-slate-900 dark:bg-slate-900/95 dark:border-slate-700/60 dark:text-white rounded-3xl p-6 shadow-2xl backdrop-blur-xl" onClick={e => e.stopPropagation()}>
+            <button type="button" onClick={() => { setNotifyProduct(null); setNotifyDone(false); setNotifyContact(''); }} className="absolute top-4 end-4 text-slate-400 hover:text-slate-900 dark:text-slate-500 dark:hover:text-white cursor-pointer text-xl">×</button>
             <div className="text-2xl mb-3">🔔</div>
-            <h3 className="font-black text-base text-white mb-1">{s.notifyTitle}</h3>
-            <p className="text-xs text-slate-400 mb-4">{notifyProduct.name}</p>
+            <h3 className="font-black text-base text-slate-900 dark:text-white mb-1">{s.notifyTitle}</h3>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mb-4">{notifyProduct.name}</p>
             {notifyDone ? (
-              <p className="text-emerald-400 font-bold text-sm text-center py-4">{s.notifySuccess}</p>
+              <p className="text-emerald-600 dark:text-emerald-400 font-bold text-sm text-center py-4">{s.notifySuccess}</p>
             ) : (
               <form onSubmit={async e => {
                 e.preventDefault();
@@ -1089,7 +1089,7 @@ export default function StorePage() {
                 setNotifyDone(true);
               }}>
                 <input required type="text" value={notifyContact} onChange={e => setNotifyContact(e.target.value)} placeholder={s.notifyPlaceholder}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-white placeholder:text-slate-600 focus:outline-none focus:border-emerald-500 mb-3 transition-colors" />
+                  className="w-full bg-white text-slate-900 placeholder-slate-400 border border-slate-300 dark:bg-slate-950 dark:text-white dark:placeholder-slate-500 dark:border-slate-700 rounded-xl px-3 py-2.5 text-xs focus:outline-none focus:border-emerald-500 mb-3 transition-colors" />
                 <button type="submit" disabled={notifyLoading}
                   className={`${BTN_PRIMARY} w-full py-2.5 text-xs`}>
                   {notifyLoading ? '...' : s.notifyBtn}
@@ -1126,7 +1126,7 @@ export default function StorePage() {
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
               transition={{ duration: 0.2, ease: 'easeOut' }}
-              className="relative w-full sm:max-w-lg bg-[#0d1117] border border-white/10 rounded-t-3xl sm:rounded-3xl shadow-2xl overflow-hidden max-h-[92vh] overflow-y-auto"
+              className="relative w-full sm:max-w-lg bg-white/95 dark:bg-[#0d1117] border border-slate-200 dark:border-white/10 text-slate-900 dark:text-white rounded-t-3xl sm:rounded-3xl shadow-2xl overflow-hidden max-h-[92vh] overflow-y-auto"
               onClick={(e) => e.stopPropagation()}
             >
               {/* Ambient glow */}
@@ -1137,7 +1137,7 @@ export default function StorePage() {
               />
 
               {/* Header */}
-              <div className="relative flex items-start justify-between gap-3 p-5 sm:p-6 border-b border-white/8">
+              <div className="relative flex items-start justify-between gap-3 p-5 sm:p-6 border-b border-slate-200 dark:border-white/8">
                 <div className="flex items-center gap-3">
                   <ProductLogoBadge
                     name={quickViewProduct.name}
@@ -1145,9 +1145,9 @@ export default function StorePage() {
                     alt={quickViewProduct.name}
                   />
                   <div>
-                    <h2 className="font-black text-lg text-white leading-tight">{getProductName(quickViewProduct, lang)}</h2>
+                    <h2 className="font-black text-lg text-slate-900 dark:text-white leading-tight">{getProductName(quickViewProduct, lang)}</h2>
                     <div className="flex flex-wrap items-center gap-2 mt-1">
-                      <span className="text-[11px] sm:text-xs text-zinc-400 dark:text-zinc-400 tracking-wide leading-snug">
+                      <span className="text-[11px] sm:text-xs text-slate-500 dark:text-zinc-400 tracking-wide leading-snug">
                         {getProductSubtitle(quickViewProduct, lang)}
                       </span>
                     </div>
@@ -1156,30 +1156,30 @@ export default function StorePage() {
                 <button
                   type="button"
                   onClick={() => setQuickViewProduct(null)}
-                  className="text-slate-500 hover:text-white transition-all duration-150 ease-out active:scale-[0.96] text-2xl leading-none shrink-0 cursor-pointer select-none mt-0.5"
+                  className="text-slate-400 hover:text-slate-900 dark:text-slate-500 dark:hover:text-white transition-all duration-150 ease-out active:scale-[0.96] text-2xl leading-none shrink-0 cursor-pointer select-none mt-0.5"
                   aria-label="Close"
                 >×</button>
               </div>
 
               <div className="p-5 sm:p-6 space-y-5">
                 {/* Price */}
-                <div className="flex items-center justify-between p-3.5 bg-slate-950/60 rounded-2xl border border-slate-800/60">
-                  <span className="text-xs text-slate-400">{s.selectedPriceFor}:</span>
-                  <span className="font-black text-xl text-transparent bg-clip-text bg-gradient-to-r from-emerald-300 to-cyan-200">
+                <div className="flex items-center justify-between p-3.5 bg-slate-50 dark:bg-slate-950/60 rounded-2xl border border-slate-200 dark:border-slate-800/60">
+                  <span className="text-xs text-slate-500 dark:text-slate-400">{s.selectedPriceFor}:</span>
+                  <span className="font-black text-xl text-transparent bg-clip-text bg-gradient-to-r from-emerald-600 to-cyan-500 dark:from-emerald-300 dark:to-cyan-200">
                     {formatMoney(lang, quickViewProduct)}
                   </span>
                 </div>
 
                 {/* Specs */}
                 <div>
-                  <h3 className="text-xs font-black text-slate-300 mb-2.5 uppercase tracking-wider">{s.modalSpecs}</h3>
+                  <h3 className="text-xs font-black text-slate-700 dark:text-slate-300 mb-2.5 uppercase tracking-wider">{s.modalSpecs}</h3>
                   <ul className="space-y-2">
                     {[
                       { icon: '📧', text: s.modalDelivery },
                       { icon: '📅', text: s.modalDuration },
                       { icon: '📱', text: s.modalDevices },
                     ].map((item, i) => (
-                      <li key={i} className="flex items-center gap-2.5 text-xs text-slate-300 bg-slate-900/40 border border-slate-800/50 rounded-xl px-3 py-2">
+                      <li key={i} className="flex items-center gap-2.5 text-xs text-slate-700 dark:text-slate-300 bg-slate-50 dark:bg-slate-900/40 border border-slate-200 dark:border-slate-800/50 rounded-xl px-3 py-2">
                         <span className="shrink-0">{item.icon}</span>
                         {item.text}
                       </li>
@@ -1189,13 +1189,13 @@ export default function StorePage() {
 
                 {/* Terms */}
                 <div>
-                  <h3 className="text-xs font-black text-slate-300 mb-2.5 uppercase tracking-wider">{s.modalTerms}</h3>
+                  <h3 className="text-xs font-black text-slate-700 dark:text-slate-300 mb-2.5 uppercase tracking-wider">{s.modalTerms}</h3>
                   <ul className="space-y-2">
                     {[
                       { icon: '🛡️', text: s.modalWarranty },
                       { icon: '✅', text: s.modalOfficial },
                     ].map((item, i) => (
-                      <li key={i} className="flex items-center gap-2.5 text-xs text-emerald-300 bg-emerald-500/10 border border-emerald-500/20 rounded-xl px-3 py-2">
+                      <li key={i} className="flex items-center gap-2.5 text-xs text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/20 rounded-xl px-3 py-2">
                         <span className="shrink-0">{item.icon}</span>
                         {item.text}
                       </li>
@@ -1206,8 +1206,8 @@ export default function StorePage() {
                 {/* Feature checklist */}
                 <ul className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   {featureChecklist.map((feat, i) => (
-                    <li key={i} className="flex items-center gap-2 text-[11px] text-slate-300">
-                      <CheckCircle2 size={13} className="text-cyan-400 shrink-0" />
+                    <li key={i} className="flex items-center gap-2 text-[11px] text-slate-700 dark:text-slate-300">
+                      <CheckCircle2 size={13} className="text-cyan-600 dark:text-cyan-400 shrink-0" />
                       {feat}
                     </li>
                   ))}

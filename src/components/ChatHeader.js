@@ -50,14 +50,14 @@ export default function ChatHeader({
   return (
     <header
       dir="ltr"
-      className="sticky top-0 z-30 h-14 w-full shrink-0 backdrop-blur-xl bg-black/40 border-b border-white/[0.08] px-5 flex items-center justify-between"
+      className="sticky top-0 z-30 h-14 w-full shrink-0 backdrop-blur-xl bg-white/90 border-b border-slate-200 px-5 flex items-center justify-between dark:bg-black/40 dark:border-white/[0.08]"
     >
       <div className="flex min-w-0 items-center gap-2.5">
         <Link
           href={backHref}
           aria-label={backLabel}
           title={backLabel}
-          className="p-1.5 rounded-lg hover:bg-white/5 transition-colors text-white/70 hover:text-white"
+          className="p-1.5 rounded-lg hover:bg-slate-100 transition-colors text-slate-600 hover:text-slate-900 dark:hover:bg-white/5 dark:text-white/70 dark:hover:text-white"
         >
           <ArrowLeft size={18} strokeWidth={1.75} />
         </Link>
@@ -68,7 +68,7 @@ export default function ChatHeader({
             aria-hidden="true"
             title={onlineLabel}
           />
-          <h1 className="truncate font-semibold tracking-tight text-sm text-white/90" title={brand}>
+          <h1 className="truncate font-semibold tracking-tight text-sm text-slate-900 dark:text-white/90" title={brand}>
             {brand}
           </h1>
         </div>
@@ -78,13 +78,13 @@ export default function ChatHeader({
         {modelPicker}
 
         <span
-          className={`border border-white/10 bg-white/[0.04] text-white/75 text-xs px-2.5 py-1 rounded-full flex items-center gap-1.5 max-w-[11rem] sm:max-w-none backdrop-blur-md tabular-nums transition-colors duration-300 ${
-            dropping ? 'border-amber-400/25 text-amber-100' : ''
+          className={`border border-slate-200 bg-slate-50 text-slate-700 text-xs px-2.5 py-1 rounded-full flex items-center gap-1.5 max-w-[11rem] sm:max-w-none backdrop-blur-md tabular-nums transition-colors duration-300 dark:border-white/10 dark:bg-white/[0.04] dark:text-white/75 ${
+            dropping ? 'border-amber-400/40 text-amber-700 dark:border-amber-400/25 dark:text-amber-100' : ''
           }`}
           title={pointsText}
           aria-live="polite"
         >
-          <Crown size={12} className="shrink-0 text-amber-300/90" strokeWidth={1.75} aria-hidden="true" />
+          <Crown size={12} className="shrink-0 text-amber-500 dark:text-amber-300/90" strokeWidth={1.75} aria-hidden="true" />
           <span className="truncate">
             {toLocalizedNumber(displayPoints, lang === 'en' ? 'en' : 'ku')} {pointsLabel}
           </span>

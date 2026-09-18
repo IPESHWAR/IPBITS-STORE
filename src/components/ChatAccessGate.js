@@ -73,10 +73,10 @@ export default function ChatAccessGate({ onUnlocked, initialKey = '' }) {
   return (
     <div
       dir={dir}
-      className="relative min-h-screen w-full overflow-hidden bg-[#07090e] text-white flex items-center justify-center px-4 py-10"
+      className="relative min-h-screen w-full overflow-hidden bg-slate-50 text-slate-900 dark:bg-[#07090e] dark:text-white flex items-center justify-center px-4 py-10"
     >
       <div
-        className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_50%_30%,rgba(56,189,248,0.1),transparent_55%)]"
+        className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_50%_30%,rgba(56,189,248,0.12),transparent_55%)] dark:bg-[radial-gradient(ellipse_at_50%_30%,rgba(56,189,248,0.1),transparent_55%)]"
         aria-hidden="true"
       />
 
@@ -85,23 +85,23 @@ export default function ChatAccessGate({ onUnlocked, initialKey = '' }) {
       </div>
 
       <div
-        className={`relative w-full max-w-sm rounded-3xl border border-white/[0.08] bg-[#0c1018]/90 p-7 sm:p-8 shadow-2xl shadow-black/40 backdrop-blur-xl ${
+        className={`relative w-full max-w-sm rounded-3xl border border-slate-200 bg-white p-7 sm:p-8 shadow-xl shadow-slate-200/60 dark:border-white/[0.08] dark:bg-[#0c1018]/90 dark:shadow-black/40 backdrop-blur-xl ${
           shake ? 'translate-x-[-4px]' : 'translate-x-0'
         } transition-transform duration-150`}
       >
         <div className="mb-7 flex flex-col items-center text-center">
-          <span className="relative mb-5 inline-flex h-12 w-12 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.03]">
-            <Lock size={20} className="text-white/75" strokeWidth={1.75} />
+          <span className="relative mb-5 inline-flex h-12 w-12 items-center justify-center rounded-2xl border border-slate-200 bg-slate-50 dark:border-white/10 dark:bg-white/[0.03]">
+            <Lock size={20} className="text-slate-700 dark:text-white/75" strokeWidth={1.75} />
             <KeyRound
               size={13}
-              className="absolute -bottom-0.5 -end-0.5 text-sky-300/90 animate-pulse"
+              className="absolute -bottom-0.5 -end-0.5 text-sky-600 dark:text-sky-300/90 animate-pulse"
               strokeWidth={2}
             />
           </span>
-          <h1 className="text-[15px] sm:text-base font-semibold tracking-tight text-white/90 leading-snug">
+          <h1 className="text-[15px] sm:text-base font-semibold tracking-tight text-slate-900 dark:text-white/90 leading-snug">
             {g.gateTitle}
           </h1>
-          <p className="mt-2.5 text-xs leading-relaxed text-white/50 max-w-[16rem]">
+          <p className="mt-2.5 text-xs leading-relaxed text-slate-600 dark:text-white/50 max-w-[16rem]">
             {g.gateDesc}
           </p>
         </div>
@@ -118,14 +118,14 @@ export default function ChatAccessGate({ onUnlocked, initialKey = '' }) {
               autoComplete="off"
               spellCheck={false}
               dir="ltr"
-              className="w-full rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3.5 text-center font-mono text-sm tracking-[0.14em] text-white placeholder:text-white/30 placeholder:tracking-normal focus:border-white/30 focus:outline-none focus:bg-white/[0.04] transition-colors"
+              className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3.5 text-center font-mono text-sm tracking-[0.14em] text-slate-900 placeholder:text-slate-400 placeholder:tracking-normal focus:border-teal-500 focus:ring-1 focus:ring-teal-500 focus:outline-none dark:border-white/10 dark:bg-white/[0.03] dark:text-white dark:placeholder:text-white/30 dark:focus:border-white/30 dark:focus:bg-white/[0.04] transition-colors"
             />
           </label>
 
           {error ? (
             <p
               role="alert"
-              className="rounded-xl border border-rose-500/20 bg-rose-500/[0.08] px-3 py-2 text-center text-[12px] font-medium text-rose-300"
+              className="rounded-xl border border-rose-500/20 bg-rose-500/[0.08] px-3 py-2 text-center text-[12px] font-medium text-rose-600 dark:text-rose-300"
             >
               {error}
             </p>
@@ -141,10 +141,10 @@ export default function ChatAccessGate({ onUnlocked, initialKey = '' }) {
           </button>
         </form>
 
-        <p className="mt-5 text-center text-xs text-white/40">
+        <p className="mt-5 text-center text-xs text-slate-500 dark:text-white/40">
           <Link
             href="/#pricing"
-            className="font-medium text-sky-300/85 hover:text-sky-200 underline underline-offset-4 transition-colors"
+            className="font-medium text-sky-700 hover:text-sky-800 dark:text-sky-300/85 dark:hover:text-sky-200 underline underline-offset-4 transition-colors"
           >
             {g.gateBuyLink}
           </Link>
