@@ -30,6 +30,7 @@ import {
   FALLBACK_IMAGE_MODELS,
   FALLBACK_PAID_MODELS,
 } from '@/lib/aiModels';
+import { readIpbitsChatSse } from '@/lib/chatStream';
 import {
   getAccessCredits,
   isLicenseActive,
@@ -622,6 +623,7 @@ export default function ChatPage() {
 
     const userText = input.trim();
     const currentAttachment = attachment;
+    const selectedModel = model || FALLBACK_DEFAULT;
 
     const displayAttachment = currentAttachment
       ? {
@@ -655,8 +657,15 @@ export default function ChatPage() {
       image: currentAttachment?.kind === 'image' ? currentAttachment.dataUrl : null,
     };
 
+    // Instant UI: user bubble + empty streaming assistant (typing) — zero perceived delay
+    const assistantPlaceholder = {
+      role: 'assistant',
+      content: '',
+      streaming: true,
+      modelUsed: selectedModel,
+    };
     const newMessages = [...messages, userMsg];
-    setMessages(newMessages);
+    setMessages([...newMessages, assistantPlaceholder]);
     setInput('');
     clearAttachment();
     setLoading(true);
@@ -684,55 +693,164 @@ export default function ChatPage() {
 
       const res = await fetch('/api/chat', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
         body: JSON.stringify({
           messages: apiMessages,
-          model: model || FALLBACK_DEFAULT,
+          model: selectedModel,
           userEmail: license?.customer_email || license?.customer_phone || null,
         }),
       });
 
-      const data = await res.json();
+      const contentType = res.headers.get('content-type') || '';
 
-      if (res.ok && (data.reply || data.choices?.[0]?.message?.content)) {
-        const replyText = data.reply || data.choices[0].message.content;
-        const spent = Math.max(0, Math.round(Number(data.points_spent) || 0));
+      // JSON error (auth / balance) — keep non-stream errors working
+      if (!res.ok && !contentType.includes('text/event-stream')) {
+        const data = await res.json().catch(() => ({}));
+        setMessages((prev) => {
+          const next = [...prev];
+          const last = next[next.length - 1];
+          if (last?.role === 'assistant' && last.streaming) {
+            next[next.length - 1] = {
+              role: 'assistant',
+              content: (c.errorPrefix || '') + (data.error || c.errorDefault || 'Error'),
+              streaming: false,
+            };
+          }
+          return next;
+        });
+        return;
+      }
 
-        setMessages((prev) => [
-          ...prev,
-          {
-            role: 'assistant',
-            content: replyText,
-            pointsSpent: spent,
-            modelUsed: model || FALLBACK_DEFAULT,
-          },
-        ]);
+      const applySpent = (spent) => {
+        const n = Math.max(0, Math.round(Number(spent) || 0));
+        if (n <= 0) return;
+        setLicense((prev) => {
+          const nextLic = deductVipPoints(prev, n);
+          if (!nextLic) return prev;
+          const saved = writeLicenseSession(nextLic);
+          if (getVipPoints(saved) <= 0) {
+            queueMicrotask(() => setRedeemOpen(true));
+          }
+          return saved;
+        });
+      };
 
-        if (spent > 0)  {
-          setLicense((prev) => {
-            const nextLic = deductVipPoints(prev, spent);
-            if (!nextLic) return prev;
-            const saved = writeLicenseSession(nextLic);
-            if (getVipPoints(saved) <= 0) {
-              queueMicrotask(() => setRedeemOpen(true));
+      if (contentType.includes('text/event-stream') && res.body) {
+        let gotFirstToken = false;
+        await readIpbitsChatSse(res, {
+          onDelta: (full) => {
+            if (!gotFirstToken && full) {
+              gotFirstToken = true;
+              // Hide global typing once tokens flow; bubble shows live text
+              setLoading(false);
             }
-            return saved;
+            // Schedule update off the critical path when possible
+            const paint = () => {
+              setMessages((prev) => {
+                const next = [...prev];
+                const last = next[next.length - 1];
+                if (last?.role === 'assistant') {
+                  next[next.length - 1] = {
+                    ...last,
+                    content: full,
+                    streaming: true,
+                    modelUsed: last.modelUsed || selectedModel,
+                  };
+                }
+                return next;
+              });
+            };
+            if (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') {
+              window.requestAnimationFrame(paint);
+            } else {
+              paint();
+            }
+          },
+          onDone: (meta) => {
+            setMessages((prev) => {
+              const next = [...prev];
+              const last = next[next.length - 1];
+              if (last?.role === 'assistant') {
+                next[next.length - 1] = {
+                  ...last,
+                  content: meta?.reply || last.content || '',
+                  streaming: false,
+                  pointsSpent: Math.max(0, Math.round(Number(meta?.points_spent) || 0)),
+                  modelUsed: meta?.model || last.modelUsed || selectedModel,
+                };
+              }
+              return next;
+            });
+            applySpent(meta?.points_spent);
+          },
+          onError: (errMsg) => {
+            setMessages((prev) => {
+              const next = [...prev];
+              const last = next[next.length - 1];
+              if (last?.role === 'assistant') {
+                next[next.length - 1] = {
+                  role: 'assistant',
+                  content: (c.errorPrefix || '') + (errMsg || c.errorDefault || 'Error'),
+                  streaming: false,
+                };
+              }
+              return next;
+            });
+          },
+        });
+      } else {
+        // Legacy JSON fallback
+        const data = await res.json().catch(() => ({}));
+        if (res.ok && (data.reply || data.choices?.[0]?.message?.content)) {
+          const replyText = data.reply || data.choices[0].message.content;
+          const spent = Math.max(0, Math.round(Number(data.points_spent) || 0));
+          setMessages((prev) => {
+            const next = [...prev];
+            const last = next[next.length - 1];
+            if (last?.role === 'assistant') {
+              next[next.length - 1] = {
+                role: 'assistant',
+                content: replyText,
+                pointsSpent: spent,
+                modelUsed: data.model || selectedModel,
+                streaming: false,
+              };
+            }
+            return next;
+          });
+          applySpent(spent);
+        } else {
+          setMessages((prev) => {
+            const next = [...prev];
+            const last = next[next.length - 1];
+            if (last?.role === 'assistant') {
+              next[next.length - 1] = {
+                role: 'assistant',
+                content: (c.errorPrefix || '') + (data.error || c.errorDefault || 'Error'),
+                streaming: false,
+              };
+            }
+            return next;
           });
         }
-      } else {
-        setMessages((prev) => [
-          ...prev,
-          {
-            role: 'assistant',
-            content: (c.errorPrefix || '') + (data.error || c.errorDefault || 'Error'),
-          },
-        ]);
       }
     } catch {
-      setMessages((prev) => [
-        ...prev,
-        { role: 'assistant', content: c.errorConnection || 'Connection error' },
-      ]);
+      setMessages((prev) => {
+        const next = [...prev];
+        const last = next[next.length - 1];
+        if (last?.role === 'assistant' && last.streaming) {
+          next[next.length - 1] = {
+            role: 'assistant',
+            content: c.errorConnection || 'Connection error',
+            streaming: false,
+          };
+          return next;
+        }
+        return [
+          ...prev,
+          { role: 'assistant', content: c.errorConnection || 'Connection error' },
+        ];
+      });
     } finally {
       setLoading(false);
     }
@@ -834,6 +952,20 @@ export default function ChatPage() {
               {m.content ? (
                 <div className="max-w-full overflow-x-auto">
                   {renderMessageContent(m.content, c.imageCreated)}
+                  {m.streaming ? (
+                    <span
+                      className="inline-block w-1.5 h-4 ms-0.5 align-middle bg-sky-400/80 animate-pulse rounded-sm"
+                      aria-hidden="true"
+                    />
+                  ) : null}
+                </div>
+              ) : m.streaming ? (
+                <div className="flex items-center gap-2 text-xs text-white/55">
+                  <span className="relative flex h-1.5 w-1.5">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-sky-400/70 opacity-75" />
+                    <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-sky-400" />
+                  </span>
+                  <span>{c.thinking}</span>
                 </div>
               ) : m.attachment && !m.content ? (
                 <span className="text-white/45 text-xs italic">{c.attachedOnly || ''}</span>
@@ -858,7 +990,7 @@ export default function ChatPage() {
           </div>
         ))}
 
-        {loading && (
+        {loading && !messages.some((m) => m.streaming) && (
           <div className="flex items-center gap-3 flex-row-reverse">
             <div className="w-8 h-8 rounded-full bg-white/[0.04] border border-white/10 flex items-center justify-center shrink-0 overflow-hidden p-1">
               {/* eslint-disable-next-line @next/next/no-img-element */}
