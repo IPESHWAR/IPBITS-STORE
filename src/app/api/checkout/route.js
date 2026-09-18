@@ -122,7 +122,7 @@ export async function POST(request) {
 
     const orderId = makeOrderId();
     const { kind } = classifyOrderKind(items, itemsFormatted, finalIQD);
-    const tier = kind === 'ai' ? inferAiTier(items, finalIQD) : 'daily';
+    const tier = kind === 'ai' ? inferAiTier(items, finalIQD, itemsFormatted) : 'daily';
     const plan = resolveSubscriptionPlan(
       tier === 'daily' ? 'test' : tier === '3months' ? 'three_months' : tier
     );
@@ -138,12 +138,13 @@ export async function POST(request) {
       const fullPayload = {
         ...baseOrderData,
         customer_name: customerName,
+        items: Array.isArray(items) ? items : [{ name: itemsFormatted }],
         items_label: itemsFormatted,
         total_iqd: finalIQD,
         total_usd: Number(totalUSD) || 0,
         payment_method: paymentMethod || null,
         transaction_id: String(transactionId || '').trim() || null,
-        plan_type: kind === 'ai' ? (plan?.plan_type || 'trial') : 'account_service',
+        plan_type: kind === 'ai' ? (plan?.plan_type || 'test_1d') : 'account_service',
         duration_days: kind === 'ai' ? (plan?.duration_days || 1) : null,
       };
       let { error: insertErr } = await supabase.from('orders').insert(fullPayload);

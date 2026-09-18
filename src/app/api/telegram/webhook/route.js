@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { generateLicenseForOrder } from '@/lib/licenseService';
 import { approveTopup, rejectTopup } from '@/lib/walletService';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
+import { inferPlanFromText, resolvePlanFromOrderContext } from '@/config/plans';
 import {
   answerCallbackQuery,
   classifyOrderKind,
@@ -124,12 +125,18 @@ function parseOrderFromCaption(text) {
   const phone = String(phoneMatch?.[1] || '').trim();
   const kind = String(kindMatch?.[1] || '').trim();
   const product = String(productMatch?.[1] || '').trim();
+  const captionKind = /AI Hub/i.test(kind) ? 'ai' : /Account Service/i.test(kind) ? 'account' : '';
+  let planType = 'account_service';
+  if (captionKind === 'ai') {
+    const inferred = inferPlanFromText(`${product} ${raw}`);
+    planType = inferred?.plan_type || 'test_1d';
+  }
   return {
     name: name && name !== 'نەدیار' ? name : '',
     phone: phone && phone !== 'نینە' ? phone : '',
     product: product && product !== '—' ? product : '',
-    planType: /AI Hub/i.test(kind) ? 'trial' : 'account_service',
-    captionKind: /AI Hub/i.test(kind) ? 'ai' : /Account Service/i.test(kind) ? 'account' : '',
+    planType,
+    captionKind,
   };
 }
 
@@ -258,18 +265,30 @@ async function handleApprove({
   const parsed = parseOrderFromCaption(messageText);
   const name = orderName(order) || parsed.name || '—';
   const phone = orderPhone(order) || parsed.phone || '';
-  const planType = order?.plan_type || parsed.planType || 'trial';
-  const durationDays = order?.duration_days ?? null;
   const items = order?.items || [];
   const itemsLabel = order?.items_label || parsed.product || '';
   const totalIQD = Number(order?.total_iqd || 0);
+  const totalUSD = Number(order?.total_usd || 0);
   const productTitle = productTitleFromOrder(order, items, itemsLabel, parsed.product);
+  const resolvedPlan = resolvePlanFromOrderContext({
+    planType: order?.plan_type || parsed.planType,
+    durationDays: order?.duration_days,
+    items,
+    itemsLabel,
+    messageText,
+    productTitle,
+    totalIQD,
+    totalUSD,
+  });
+  const planType = resolvedPlan.plan_type;
+  const durationDays = resolvedPlan.duration_days;
+  const planSuffix = resolvedPlan.plan_suffix;
   const cleanPhone = toWhatsAppDigits(phone);
   const accountService = isAccountServiceOrder({
     order,
     items,
     itemsLabel,
-    planType,
+    planType: order?.plan_type || parsed.planType,
     messageText,
     totalIQD,
     captionKind: parsed.captionKind,
@@ -344,7 +363,9 @@ async function handleApprove({
       name,
       planType,
       durationDays,
+      planSuffix,
       items,
+      itemsLabel,
     });
   } catch (err) {
     console.error('Key gen on approve failed:', err);
@@ -359,6 +380,8 @@ async function handleApprove({
         status: 'approved',
         license_key: license.key_code,
         license_key_id: license.id || null,
+        plan_type: planType,
+        duration_days: durationDays,
         updated_at: new Date().toISOString(),
       })
       .eq('id', orderId);
@@ -370,6 +393,8 @@ async function handleApprove({
         .update({
           status: 'approved',
           license_key: license.key_code,
+          plan_type: planType,
+          duration_days: durationDays,
           updated_at: new Date().toISOString(),
         })
         .eq('id', orderId);
@@ -389,6 +414,7 @@ async function handleApprove({
         status: 'approved',
         license_key: license.key_code,
         plan_type: planType,
+        duration_days: durationDays,
         updated_at: new Date().toISOString(),
       },
       { onConflict: 'id' }

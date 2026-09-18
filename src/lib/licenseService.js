@@ -1,11 +1,11 @@
 import { generateLicenseKey } from '@/lib/generateKey';
-import { computeExpiresAt, resolvePlanFromItems, TIER_TO_PLAN } from '@/lib/licensePlans';
+import { computeExpiresAt, resolvePlanFromItems } from '@/lib/licensePlans';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import {
   createAutomatedLicense,
   provisionOpenRouterKeyForLicense,
 } from '@/lib/openRouterProvisioning';
-import { resolveSubscriptionPlan } from '@/config/plans';
+import { resolveSubscriptionPlan, resolvePlanFromOrderContext } from '@/config/plans';
 
 const MAX_RETRIES = 5;
 
@@ -126,21 +126,23 @@ export function generateLicenseForOrder({
   durationDays,
   planSuffix,
   orderId,
+  itemsLabel,
 }) {
-  let plan;
-  if (planType) {
-    const subscription = resolveSubscriptionPlan(planType);
-    const fromKnown = Object.values(TIER_TO_PLAN).find(
-      (p) => p.planType === planType || p.planId === planType
-    );
-    plan = {
-      planType: subscription.plan_type,
-      durationDays: durationDays || fromKnown?.durationDays || subscription.duration_days,
-      planSuffix: planSuffix || fromKnown?.planSuffix || subscription.plan_suffix,
-    };
-  } else {
-    plan = resolvePlanFromItems(items);
-  }
+  const resolved = resolvePlanFromOrderContext({
+    planType,
+    durationDays,
+    items,
+    itemsLabel,
+  });
+  const fromItems = !planType ? resolvePlanFromItems(items, itemsLabel) : null;
+
+  const plan = {
+    planType: resolved.plan_type || fromItems?.planType || planType,
+    durationDays:
+      durationDays || resolved.duration_days || fromItems?.durationDays || resolved.duration_days,
+    planSuffix:
+      planSuffix || resolved.plan_suffix || fromItems?.planSuffix || resolved.plan_suffix,
+  };
 
   return createLicenseKey({
     planType: plan.planType,

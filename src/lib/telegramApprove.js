@@ -61,19 +61,21 @@ export function classifyOrderKind(items, itemsLabel = '', totalIQD = 0) {
   return { kind: 'account', productName };
 }
 
-export function inferAiTier(items, totalIQD) {
+export function inferAiTier(items, totalIQD, itemsLabel = '') {
   const list = Array.isArray(items) ? items : [];
-  const hay = list
-    .map((i) => `${i?.id || ''} ${i?.planId || ''} ${i?.name || ''}`)
+  const hay = [
+    itemsLabel,
+    ...list.map((i) => `${i?.id || ''} ${i?.planId || ''} ${i?.slug || ''} ${i?.name || ''} ${i?.title || ''}`),
+  ]
     .join(' ')
     .toLowerCase();
 
   const checks = [
-    [/1_day|test_1d|\b1d\b|تێست|تیست|daily|tst/, 'daily'],
-    [/7_days|weekly_7d|\b7d\b|هەفت|weekly/, 'weekly'],
-    [/90_days|quarterly|3months|٣ مەه/, '3months'],
-    [/1_year|yearly|\b1y\b|ساڵانە/, 'yearly'],
-    [/30_days|monthly_30d|\b30d\b|مەهانە|monthly/, 'monthly'],
+    [/1_day|test_1d|\b1d\b|تێست|تیست|trial|daily|tst|ai_bundle_1_day/, 'daily'],
+    [/7_days|weekly_7d|\b7d\b|هەفت|weekly|ai_bundle_7_days/, 'weekly'],
+    [/90_days|quarterly|3months|٣ مەه|ai_bundle_90/, '3months'],
+    [/1_year|yearly|\b1y\b|ساڵانە|ai_bundle_1_year/, 'yearly'],
+    [/30_days|monthly_30d|\b30d\b|مەهانە|مانگانە|monthly|ai_bundle_30_days/, 'monthly'],
   ];
   for (const [re, tier] of checks) {
     if (re.test(hay)) return tier;
