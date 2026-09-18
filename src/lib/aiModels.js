@@ -50,7 +50,7 @@ const PROVIDER_LABELS = {
 };
 
 const IMAGE_MODEL_RE =
-  /\b(flux|recraft|dall-?e|stable.?diffusion|sdxl|sd3|imagen|ideogram|playground.?v|black-forest-labs|midjourney|kandinsky|lumina)\b/i;
+  /\b(flux|flux-1|recraft|recraft-ai|dall-?e|stable.?diffusion|sdxl|sd3|imagen|ideogram|playground.?v|black-forest-labs|midjourney|kandinsky|lumina)\b/i;
 
 export function inferProvider(modelId, modelName = '') {
   const slug = String(modelId || '').split('/')[0].toLowerCase();
@@ -117,24 +117,111 @@ export const FALLBACK_PAID_MODELS = [
 
 export const FALLBACK_IMAGE_MODELS = [
   {
-    id: 'black-forest-labs/flux.1-schnell',
+    id: 'black-forest-labs/flux-1-schnell',
     name: 'FLUX.1 Schnell',
+    type: 'Image',
     tier: 'paid',
     isImageModel: true,
   },
   {
-    id: 'black-forest-labs/flux.1-dev',
+    id: 'black-forest-labs/flux-1-dev',
     name: 'FLUX.1 Dev',
+    type: 'Image',
     tier: 'paid',
     isImageModel: true,
   },
   {
-    id: 'stabilityai/stable-diffusion-3.5-large',
-    name: 'Stable Diffusion 3.5 Large',
+    id: 'stabilityai/stable-diffusion-xl-base-1.0',
+    name: 'Stable Diffusion XL',
+    type: 'Image',
+    tier: 'paid',
+    isImageModel: true,
+  },
+  {
+    id: 'recraft-ai/recraft-v3',
+    name: 'Recraft V3',
+    type: 'Image',
     tier: 'paid',
     isImageModel: true,
   },
 ];
+
+/** Always-available image models (injected even if OpenRouter omits them). */
+export const ESSENTIAL_IMAGE_MODELS = FALLBACK_IMAGE_MODELS.map((m) => ({ ...m }));
+
+/** Alternate OpenRouter slugs → canonical essential id */
+const ESSENTIAL_IMAGE_ALIASES = {
+  'black-forest-labs/flux.1-schnell': 'black-forest-labs/flux-1-schnell',
+  'black-forest-labs/flux.1-dev': 'black-forest-labs/flux-1-dev',
+  'black-forest-labs/flux-schnell': 'black-forest-labs/flux-1-schnell',
+  'stabilityai/stable-diffusion-xl': 'stabilityai/stable-diffusion-xl-base-1.0',
+  'stabilityai/sdxl': 'stabilityai/stable-diffusion-xl-base-1.0',
+  'recraft-ai/recraft-v3-svg': 'recraft-ai/recraft-v3',
+  'recraft/recraft-v3': 'recraft-ai/recraft-v3',
+};
+
+function essentialAliasIds(canonicalId) {
+  const id = String(canonicalId || '').toLowerCase();
+  const alts = [id];
+  for (const [alias, canon] of Object.entries(ESSENTIAL_IMAGE_ALIASES)) {
+    if (String(canon).toLowerCase() === id) alts.push(alias.toLowerCase());
+  }
+  // flux-1 ↔ flux.1
+  if (id.includes('flux-1-')) alts.push(id.replace('flux-1-', 'flux.1-'));
+  if (id.includes('flux.1-')) alts.push(id.replace('flux.1-', 'flux-1-'));
+  return [...new Set(alts)];
+}
+
+/**
+ * Guarantee FLUX / SDXL / Recraft appear in the image list with isImageModel: true.
+ * Prefers live OpenRouter rows when an alias match exists; otherwise injects essentials.
+ */
+export function ensureEssentialImageModels(imageList = []) {
+  const list = Array.isArray(imageList) ? imageList.map((m) => ({ ...m })) : [];
+
+  for (const ess of ESSENTIAL_IMAGE_MODELS) {
+    const aliases = essentialAliasIds(ess.id);
+    const idx = list.findIndex((m) => aliases.includes(String(m.id || '').toLowerCase()));
+
+    if (idx >= 0) {
+      const row = list[idx];
+      list[idx] = {
+        ...row,
+        name: ess.name || row.name,
+        type: 'Image',
+        isImageModel: true,
+        tier: row.tier || ess.tier || 'paid',
+        isFree: row.isFree === true || row.tier === 'free',
+      };
+    } else {
+      list.unshift({
+        id: ess.id,
+        name: ess.name,
+        type: 'Image',
+        tier: 'paid',
+        isFree: false,
+        isImageModel: true,
+        isRouter: false,
+        provider: inferProvider(ess.id, ess.name),
+        context_length: null,
+        pricing: {
+          prompt: '0.00002',
+          completion: '0',
+          points: mapPricingToPoints({ prompt: '0.00002', completion: '0' }),
+        },
+      });
+    }
+  }
+
+  // Dedupe by lowercase id (keep first)
+  const seen = new Set();
+  return list.filter((m) => {
+    const id = String(m.id || '').toLowerCase();
+    if (!id || seen.has(id)) return false;
+    seen.add(id);
+    return true;
+  });
+}
 
 /** @deprecated use FALLBACK_FREE_MODELS + FALLBACK_PAID_MODELS */
 export const CONFIGURED_AI_MODELS = [...FALLBACK_FREE_MODELS, ...FALLBACK_PAID_MODELS];
@@ -280,6 +367,7 @@ export function normalizeOpenRouterModel(raw) {
     tier: isFree ? 'free' : tier,
     isFree,
     isImageModel,
+    type: isImageModel ? 'Image' : undefined,
     isRouter: id === OPENROUTER_FREE_ROUTER_ID,
     pricing: {
       ...(raw.pricing || {}),

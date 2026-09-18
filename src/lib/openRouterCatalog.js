@@ -1,5 +1,6 @@
 import {
   categorizeOpenRouterModels,
+  ensureEssentialImageModels,
   getFallbackCatalog,
   pickDefaultModel,
 } from '@/lib/aiModels';
@@ -15,7 +16,7 @@ let memoryCache = {
 function shapePayload(catalog, source) {
   const free = catalog.free || [];
   const paid = catalog.paid || [];
-  const image = catalog.image || [];
+  const image = ensureEssentialImageModels(catalog.image || []);
   const all = [...free, ...paid, ...image];
   return {
     free,

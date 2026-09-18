@@ -63,9 +63,23 @@ export default function FreeModelPicker({
   const rootRef = useRef(null);
   const searchRef = useRef(null);
 
+  /** All rows tagged as image models (prop list + any misfiled free/paid). */
+  const allImageTagged = useMemo(() => {
+    const map = new Map();
+    for (const m of imageModels || []) {
+      if (m?.id) map.set(m.id, { ...m, isImageModel: true, type: m.type || 'Image' });
+    }
+    for (const m of [...(freeModels || []), ...(paidModels || [])]) {
+      if (m?.isImageModel && m?.id && !map.has(m.id)) {
+        map.set(m.id, { ...m, isImageModel: true, type: m.type || 'Image' });
+      }
+    }
+    return Array.from(map.values());
+  }, [imageModels, freeModels, paidModels]);
+
   const allModels = useMemo(
-    () => [...freeModels, ...paidModels, ...imageModels],
-    [freeModels, paidModels, imageModels]
+    () => [...freeModels, ...paidModels, ...allImageTagged],
+    [freeModels, paidModels, allImageTagged]
   );
 
   const selected = useMemo(
@@ -94,9 +108,10 @@ export default function FreeModelPicker({
   const q = query.trim().toLowerCase();
   const filterList = (list) => {
     if (!q) return list;
-    return list.filter((m) => {
-      const hay = `${m.name || ''} ${m.id || ''} ${m.provider || ''}`.toLowerCase();
-      return hay.includes(q);
+    return (list || []).filter((m) => {
+      const name = String(m?.name || '').toLowerCase();
+      const id = String(m?.id || '').toLowerCase();
+      return name.includes(q) || id.includes(q);
     });
   };
 
@@ -104,25 +119,25 @@ export default function FreeModelPicker({
     () =>
       filterList([
         ...freeModels,
-        ...imageModels.filter((m) => m.isFree || m.tier === 'free'),
+        ...allImageTagged.filter((m) => m.isFree || m.tier === 'free'),
       ]),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [freeModels, imageModels, q]
+    [freeModels, allImageTagged, q]
   );
 
   const imageOnly = useMemo(
-    () => filterList(imageModels),
+    () => filterList(allImageTagged),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [imageModels, q]
+    [allImageTagged, q]
   );
 
   const allVisible = useMemo(() => {
     const freeVis = filterList(freeModels);
-    const paidVis = filterList(paidModels);
-    const imageVis = filterList(imageModels);
+    const paidVis = filterList(paidModels.filter((m) => !m.isImageModel));
+    const imageVis = filterList(allImageTagged);
     return { freeVis, paidVis, imageVis };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [freeModels, paidModels, imageModels, q]);
+  }, [freeModels, paidModels, allImageTagged, q]);
 
   const countLabel = (labels.freeModelsCount || '{n}+ Free AI Models').replace(
     '{n}',
