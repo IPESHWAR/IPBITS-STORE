@@ -666,10 +666,10 @@ export default function StorePage() {
         >
           <motion.h1
             variants={fadeUp}
-            className={`lm-hero-title mb-5 text-3xl sm:text-5xl ${HEADING} tracking-tight leading-[1.3]`}
+            className="lm-hero-title mb-5 text-3xl sm:text-5xl text-slate-900 dark:text-white font-extrabold tracking-tight leading-[1.3]"
           >
             {s.heroTitle1}{' '}
-            <span className="lm-hero-accent bg-gradient-to-r from-teal-600 to-cyan-600 dark:from-teal-400 dark:to-cyan-300 bg-clip-text text-transparent font-extrabold">
+            <span className="lm-hero-accent bg-gradient-to-r from-emerald-600 via-teal-600 to-cyan-600 dark:from-emerald-500 dark:via-teal-400 dark:to-cyan-400 bg-clip-text text-transparent font-extrabold">
               {s.heroTitle2}
             </span>
           </motion.h1>

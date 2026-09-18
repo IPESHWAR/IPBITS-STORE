@@ -983,10 +983,16 @@ button:focus-visible {
   font-weight: 500 !important;
 }
 
-/* ── Hero title accent ("دیجیتاڵ") — rich teal in light mode ── */
-.light-mode .lm-hero-title .lm-hero-accent,
+/* ── Hero title accent (Digital Store / دیجیتاڵ / الرقمي) — brand emerald ── */
+html.light-mode .lm-hero-title .lm-hero-accent,
+html:not(.dark) .lm-hero-title .lm-hero-accent,
 .light-mode .lm-hero-accent.text-transparent.bg-clip-text {
-  background-image: linear-gradient(to right, #0d9488, #0891b2) !important; /* teal-600 → cyan-600 */
+  background-image: linear-gradient(
+    to right,
+    #059669,
+    #0d9488,
+    #0891b2
+  ) !important; /* emerald-600 → teal-600 → cyan-600 */
   -webkit-background-clip: text !important;
   background-clip: text !important;
   -webkit-text-fill-color: transparent !important;
@@ -995,6 +1001,22 @@ button:focus-visible {
   text-shadow: none !important;
   -webkit-text-stroke: 0 !important;
   filter: none !important;
+}
+
+html.dark .lm-hero-title .lm-hero-accent {
+  background-image: linear-gradient(
+    to right,
+    #10b981,
+    #2dd4bf,
+    #22d3ee
+  ) !important; /* emerald-500 → teal-400 → cyan-400 */
+  -webkit-background-clip: text !important;
+  background-clip: text !important;
+  -webkit-text-fill-color: transparent !important;
+  color: transparent !important;
+  font-weight: 800 !important;
+  text-shadow: none !important;
+  -webkit-text-stroke: 0 !important;
 }
 
 /* ── Hero special-offer badge ── */
