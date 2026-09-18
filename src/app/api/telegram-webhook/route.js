@@ -24,7 +24,7 @@ const TIERS = [
     durationEn: '1 Day',
     limit: 0.75,
     iqd: 2500,
-    prefix: 'TST',
+    prefix: '1D',
   },
   {
     id: 'weekly',
@@ -33,7 +33,7 @@ const TIERS = [
     durationEn: '7 Days',
     limit: 1.75,
     iqd: 5000,
-    prefix: 'WK',
+    prefix: '7D',
   },
   {
     id: 'monthly',
@@ -42,7 +42,7 @@ const TIERS = [
     durationEn: '30 Days',
     limit: 4.0,
     iqd: 12000,
-    prefix: 'MO',
+    prefix: '30D',
   },
   {
     id: '3months',
@@ -51,7 +51,7 @@ const TIERS = [
     durationEn: '90 Days',
     limit: 8.5,
     iqd: 25000,
-    prefix: '3M',
+    prefix: '90D',
   },
   {
     id: 'yearly',
@@ -60,7 +60,7 @@ const TIERS = [
     durationEn: '1 Year',
     limit: 18.0,
     iqd: 50000,
-    prefix: 'YR',
+    prefix: '365D',
   },
 ];
 
@@ -73,12 +73,17 @@ const TIER_ALIASES = {
   test: 'test',
   weekly: 'weekly',
   wk: 'weekly',
+  '7d': 'weekly',
   monthly: 'monthly',
   mo: 'monthly',
+  '30d': 'monthly',
   '3months': '3months',
   '3m': '3months',
+  '90d': '3months',
   yearly: 'yearly',
   yr: 'yearly',
+  '1y': 'yearly',
+  '365d': 'yearly',
 };
 
 function okResponse() {
@@ -125,10 +130,10 @@ async function generateKeysLikeScript(tier, count) {
     throw new Error('Supabase URL/key missing');
   }
 
+  const { generateLicenseKey } = await import('@/lib/generateKey');
   const codes = [];
   for (let i = 1; i <= count; i += 1) {
-    const randomNum = Math.floor(1000 + Math.random() * 9000);
-    const code = `IPBITS-${tier.prefix}-${randomNum}`;
+    const code = generateLicenseKey(tier.prefix);
 
     await createOpenRouterKey(`${code}-${Date.now()}`, tier.limit);
 

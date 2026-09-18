@@ -59,7 +59,7 @@ export const SUBSCRIPTION_PLANS = {
     duration_days: 365,
     storefront_id: '1_year',
     plan_type: 'yearly_1y',
-    plan_suffix: '1Y',
+    plan_suffix: '365D',
   },
 };
 
@@ -87,6 +87,7 @@ const PLAN_ALIASES = {
   yearly_1y: 'yearly',
   '1_year': 'yearly',
   '1y': 'yearly',
+  '365d': 'yearly',
 };
 
 export function listSubscriptionPlans() {
@@ -173,17 +174,17 @@ export function openRouterKeyName(plan, orderId) {
   return `IPBITS-${planId}-${shortOrder}`.slice(0, 64);
 }
 
-/** Short package tags for customer-facing license codes (IPBITS-WK-XXXX). */
+/** Duration tags for customer-facing license codes (IPBITS-30D-XXXXXXXX). */
 export const PACKAGE_CODE_SUFFIX = {
-  test: 'TST',
-  weekly: 'WK',
-  monthly: 'MO',
-  three_months: '3M',
-  '3months': '3M',
-  yearly: 'YR',
+  test: '1D',
+  weekly: '7D',
+  monthly: '30D',
+  three_months: '90D',
+  '3months': '90D',
+  yearly: '365D',
 };
 
 export function packageCodeSuffix(packageType) {
   const plan = resolveSubscriptionPlan(packageType);
-  return PACKAGE_CODE_SUFFIX[plan.id] || PACKAGE_CODE_SUFFIX[String(packageType || '').toLowerCase()] || 'MO';
+  return PACKAGE_CODE_SUFFIX[plan.id] || PACKAGE_CODE_SUFFIX[String(packageType || '').toLowerCase()] || '30D';
 }

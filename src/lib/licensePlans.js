@@ -33,7 +33,7 @@ export function resolvePlanFromItems(items = []) {
       };
     }
   }
-  return { ...DEFAULT_PLAN, planSuffix: 'VIP' };
+  return { ...DEFAULT_PLAN, planSuffix: '30D' };
 }
 
 export function computeExpiresAt(durationDays) {

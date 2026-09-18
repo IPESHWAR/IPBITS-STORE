@@ -16,11 +16,11 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 
 // خشتەیێ پاکێجان و لیمیتێن OpenRouter
 const TIERS = [
-  { id: 'test', name: 'تیست (١ ڕۆژ)', limit: 0.75, iqd: 2500, prefix: 'TST' },
-  { id: 'weekly', name: 'هەفتانە (٧ ڕۆژ)', limit: 1.75, iqd: 5000, prefix: 'WK' },
-  { id: 'monthly', name: 'مەهانە (٣٠ ڕۆژ)', limit: 4.00, iqd: 12000, prefix: 'MO' },
-  { id: '3months', name: '٣ مەهی (٩٠ ڕۆژ)', limit: 8.50, iqd: 25000, prefix: '3M' },
-  { id: 'yearly', name: 'ساڵانە (١ ساڵ)', limit: 18.00, iqd: 50000, prefix: 'YR' },
+  { id: 'test', name: 'تیست (١ ڕۆژ)', limit: 0.75, iqd: 2500, prefix: '1D' },
+  { id: 'weekly', name: 'هەفتانە (٧ ڕۆژ)', limit: 1.75, iqd: 5000, prefix: '7D' },
+  { id: 'monthly', name: 'مەهانە (٣٠ ڕۆژ)', limit: 4.00, iqd: 12000, prefix: '30D' },
+  { id: '3months', name: '٣ مەهی (٩٠ ڕۆژ)', limit: 8.50, iqd: 25000, prefix: '90D' },
+  { id: 'yearly', name: 'ساڵانە (١ ساڵ)', limit: 18.00, iqd: 50000, prefix: '365D' },
 ];
 
 // وەرگرتنا ناڤێ پاکێجێ و هەژمارێ ژ دەرڤەی تێرمینالێ
@@ -47,7 +47,22 @@ async function startGeneration() {
     selectedTiers = TIERS;
     console.log(`🚀 دەستپێکرنا دروستکرنا هەموو پاکێجان (${inputCount} دانە بۆ هەر جۆرەکی)...`);
   } else {
-    const aliases = { daily: 'test', day: 'test', '1d': 'test', '1_day': 'test', tst: 'test' };
+    const aliases = {
+      daily: 'test',
+      day: 'test',
+      '1d': 'test',
+      '1_day': 'test',
+      tst: 'test',
+      wk: 'weekly',
+      '7d': 'weekly',
+      mo: 'monthly',
+      '30d': 'monthly',
+      '3m': '3months',
+      '90d': '3months',
+      yr: 'yearly',
+      '1y': 'yearly',
+      '365d': 'yearly',
+    };
     const tierKey = aliases[inputTier] || inputTier;
     const found = TIERS.find(t => t.id === tierKey || t.prefix.toLowerCase() === tierKey);
     if (!found) {
@@ -66,8 +81,12 @@ async function startGeneration() {
 
     for (let i = 1; i <= inputCount; i++) {
       try {
-        const randomNum = Math.floor(1000 + Math.random() * 9000);
-        const code = `IPBITS-${tier.prefix}-${randomNum}`;
+        const charset = '23456789ABCDEFGHJKMNPQRSTUVWXYZ';
+        let randomSeg = '';
+        for (let n = 0; n < 8; n++) {
+          randomSeg += charset[Math.floor(Math.random() * charset.length)];
+        }
+        const code = `IPBITS-${tier.prefix}-${randomSeg}`;
 
         // دروستکرنا کلیلێ ل OpenRouter
         const orKey = await createOpenRouterKey(`${code}-${Date.now()}`, tier.limit);

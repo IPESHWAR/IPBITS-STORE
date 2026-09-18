@@ -10,7 +10,7 @@ export const BULK_KEY_TIERS = {
     days: 1,
     limit_usd: 0.75,
     amount_iqd: 2500,
-    prefix: 'TST',
+    prefix: '1D',
   },
   weekly: {
     id: 'weekly',
@@ -18,7 +18,7 @@ export const BULK_KEY_TIERS = {
     days: 7,
     limit_usd: 1.75,
     amount_iqd: 5000,
-    prefix: 'WK',
+    prefix: '7D',
   },
   monthly: {
     id: 'monthly',
@@ -26,7 +26,7 @@ export const BULK_KEY_TIERS = {
     days: 30,
     limit_usd: 4.0,
     amount_iqd: 12000,
-    prefix: 'MO',
+    prefix: '30D',
   },
   '3months': {
     id: '3months',
@@ -34,7 +34,7 @@ export const BULK_KEY_TIERS = {
     days: 90,
     limit_usd: 8.5,
     amount_iqd: 25000,
-    prefix: '3M',
+    prefix: '90D',
   },
   yearly: {
     id: 'yearly',
@@ -42,7 +42,7 @@ export const BULK_KEY_TIERS = {
     days: 365,
     limit_usd: 18.0,
     amount_iqd: 50000,
-    prefix: 'YR',
+    prefix: '365D',
   },
 };
 
@@ -71,6 +71,7 @@ const TIER_ALIASES = {
   yr: 'yearly',
   '1y': 'yearly',
   '1_year': 'yearly',
+  '365d': 'yearly',
 };
 
 export function listBulkKeyTiers() {
@@ -92,8 +93,8 @@ export function randomCodeSegment(length = 4) {
   return out;
 }
 
-/** Customer-facing code: IPBITS-WK-A3K9 */
-export function generateBulkVoucherCode(prefix = 'MO') {
-  const clean = String(prefix || 'MO').toUpperCase().replace(/[^A-Z0-9]/g, '');
-  return `IPBITS-${clean}-${randomCodeSegment(4)}`;
+/** Customer-facing code: IPBITS-30D-XXXXXXXX */
+export function generateBulkVoucherCode(prefix = '30D') {
+  const clean = String(prefix || '30D').toUpperCase().replace(/[^A-Z0-9]/g, '') || '30D';
+  return `IPBITS-${clean}-${randomCodeSegment(8)}`;
 }

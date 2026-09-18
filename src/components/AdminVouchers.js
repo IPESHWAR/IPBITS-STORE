@@ -512,7 +512,7 @@ export default function AdminVouchers({ initialTab = 'vouchers' }) {
                         <td className="px-2 py-1.5">{t.days}</td>
                         <td className="px-2 py-1.5">${t.limit_usd.toFixed(2)}</td>
                         <td className="px-2 py-1.5">{t.amount_iqd.toLocaleString()}</td>
-                        <td className="px-2 py-1.5 font-mono">IPBITS-{t.prefix}-XXXX</td>
+                        <td className="px-2 py-1.5 font-mono">IPBITS-{t.prefix}-XXXXXXXX</td>
                       </tr>
                     ))}
                   </tbody>
