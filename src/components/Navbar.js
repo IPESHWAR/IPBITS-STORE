@@ -277,7 +277,7 @@ export default function Navbar({ onOpenCatalog }) {
           aria-modal="true"
           aria-label={m.menu}
           dir={isRtl ? 'rtl' : 'ltr'}
-          className={`fixed top-0 ${panelSide} z-[101] w-full max-w-xs sm:max-w-sm h-[100dvh] max-h-[100dvh] flex flex-col justify-between overflow-hidden pt-5 px-5 bg-[#0B0F17] text-white shadow-2xl border-white/10 transform transition-all duration-200 ease-out ${
+          className={`fixed inset-0 z-[101] sm:inset-y-0 sm:inset-x-auto ${panelSide} w-full max-w-full sm:max-w-md h-[100dvh] max-h-[100dvh] flex flex-col justify-between overflow-hidden pt-5 px-5 bg-[#0B0F17] text-white shadow-2xl border-white/10 transform transition-all duration-200 ease-out ${
             drawerVisible ? 'translate-x-0 opacity-100' : `${closedTranslate} opacity-0`
           }`}
         >
@@ -375,7 +375,7 @@ export default function Navbar({ onOpenCatalog }) {
           </nav>
 
           {/* Bottom Footer */}
-          <div className="pt-4 pb-[max(1.5rem,env(safe-area-inset-bottom))] border-t border-white/10 shrink-0">
+          <div className="pt-4 pb-safe border-t border-white/10 shrink-0">
             <a
               href={TELEGRAM_URL}
               target="_blank"

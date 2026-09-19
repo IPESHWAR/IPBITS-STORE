@@ -63,6 +63,11 @@ body {
   transition: background-color 0.2s ease, color 0.2s ease;
 }
 
+/* Mobile safe-area padding (home indicator / browser chrome) */
+.pb-safe {
+  padding-bottom: max(1.5rem, env(safe-area-inset-bottom, 0px));
+}
+
 body {
   font-family: var(--font-vazirmatn), 'Vazirmatn', sans-serif;
 }
@@ -1199,6 +1204,7 @@ body {
 
 body.drawer-open {
   overflow: hidden !important;
+  overflow-x: hidden !important;
   height: 100dvh !important;
   touch-action: none !important;
 }
