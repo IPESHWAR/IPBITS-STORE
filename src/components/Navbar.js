@@ -21,7 +21,7 @@ import { TELEGRAM_URL } from '@/lib/catalog';
 import { useLanguage } from '@/components/LanguageProvider';
 import { useTheme } from '@/components/ThemeProvider';
 
-const DRAWER_MS = 200;
+const DRAWER_MS = 300;
 
 /** Legacy hashes → current section ids */
 const SECTION_ALIASES = {
@@ -124,7 +124,7 @@ export default function Navbar({ onOpenCatalog }) {
 
   const menuLang = lang === 'ar' || lang === 'en' ? lang : 'ku';
   const m = MENU_COPY[menuLang];
-  const isRtl = menuLang === 'ku' || menuLang === 'ar';
+  const isRtl = lang === 'ku' || lang === 'ar';
   const isDarkMode = theme !== 'light';
   const isChat = pathname?.startsWith('/chat') || pathname?.startsWith('/hub');
   const isHome = pathname === '/';
@@ -244,8 +244,9 @@ export default function Navbar({ onOpenCatalog }) {
     goToSection('store');
   };
 
-  const closedTranslate = isRtl ? '-translate-x-full' : 'translate-x-full';
-  const panelSide = isRtl ? 'left-0 border-r' : 'right-0 border-l';
+  // Drawer slides from the reading-direction start side
+  const closedTranslate = isRtl ? 'translate-x-full' : '-translate-x-full';
+  const panelSide = isRtl ? 'right-0 border-l' : 'left-0 border-r';
 
   const centerLinks = [
     { id: 'store', label: m.navProducts },
@@ -259,17 +260,17 @@ export default function Navbar({ onOpenCatalog }) {
     !isChat &&
     drawerMounted &&
     createPortal(
-      <div className="fixed inset-0 z-[100] overflow-hidden touch-none" role="presentation">
+      <div className="fixed inset-0 z-[100] overflow-hidden touch-none md:hidden" role="presentation">
         {/* Backdrop */}
         <div
-          className={`fixed inset-0 bg-black/70 backdrop-blur-sm transition-opacity duration-200 ${
+          className={`fixed inset-0 bg-black/70 backdrop-blur-sm transition-opacity duration-300 ${
             drawerVisible ? 'opacity-100' : 'opacity-0'
           }`}
           aria-hidden="true"
           onClick={closeMenu}
         />
 
-        {/* Drawer Panel */}
+        {/* Drawer Panel — 320px / 85vw; RTL from right, LTR from left */}
         <aside
           id="mobile-nav-drawer"
           ref={menuPanelRef}
@@ -277,8 +278,8 @@ export default function Navbar({ onOpenCatalog }) {
           aria-modal="true"
           aria-label={m.menu}
           dir={isRtl ? 'rtl' : 'ltr'}
-          className={`fixed inset-0 z-[101] sm:inset-y-0 sm:inset-x-auto ${panelSide} w-full max-w-full sm:max-w-md h-[100dvh] max-h-[100dvh] flex flex-col justify-between overflow-hidden pt-5 px-5 bg-[#0B0F17] text-white shadow-2xl border-white/10 transform transition-all duration-200 ease-out ${
-            drawerVisible ? 'translate-x-0 opacity-100' : `${closedTranslate} opacity-0`
+          className={`fixed top-0 bottom-0 z-[101] ${panelSide} h-[100dvh] max-h-[100dvh] w-[320px] max-w-[85vw] flex flex-col justify-between overflow-hidden pt-5 px-5 bg-[#0a0f12] text-white shadow-2xl border-white/10 transform transition-transform duration-300 ease-in-out ${
+            drawerVisible ? 'translate-x-0' : closedTranslate
           }`}
         >
           {/* Top Section */}
