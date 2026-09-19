@@ -10,8 +10,8 @@ export function buildApproveKeyboard({ orderId, planId }) {
     .replace(/[^A-Z0-9]/g, '')
     .slice(0, 8);
   const approveData = planTag
-    ? `approve_order:${id}:${planTag}`.slice(0, 64)
-    : `approve_order:${id}`.slice(0, 64);
+    ? `confirm_order:${id}:${planTag}`.slice(0, 64)
+    : `confirm_order:${id}`.slice(0, 64);
   return {
     inline_keyboard: [
       [
@@ -190,7 +190,7 @@ export function getOrderReceiptUrl(orderId) {
 export function buildReceiptKeyboard(orderId, extraRows = []) {
   const url = getOrderReceiptUrl(orderId);
   const rows = [
-    [{ text: '🖨 پرێنت / Receipt', url }],
+    [{ text: '🖨 چاپکرنا وەسڵێ (Print Receipt)', url }],
     ...extraRows,
   ];
   return { inline_keyboard: rows.filter((r) => Array.isArray(r) && r.length) };

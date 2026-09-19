@@ -152,7 +152,11 @@ export default function StorePage() {
     const applyStatus = (row) => {
       if (!row) return;
       setOrderStatus(row.status);
-      if (row.status === 'approved' && (row.license_key || row.licenseKey?.key_code)) {
+      const ok =
+        row.status === 'approved' ||
+        row.status === 'confirmed' ||
+        row.status === 'completed';
+      if (ok && (row.license_key || row.licenseKey?.key_code)) {
         const key = row.license_key || row.licenseKey?.key_code;
         setGeneratedKey(key);
         setLastOrder((prev) => (prev ? { ...prev, licenseKey: key } : prev));

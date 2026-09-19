@@ -497,22 +497,20 @@ export async function POST(req) {
         await handleConfirmAcc(cq);
         return okResponse();
       }
-      // Legacy AI path only: approve_order:<phone|ref>:<tierName>
-      // Checkout order approval: approve_order:<orderId> or approve_order:<orderId>:<1D|7D|…>
-      if (data.startsWith('approve_order:')) {
-        const rest = data.slice('approve_order:'.length);
+      // Checkout: confirm_order:<orderId>:<plan> (also legacy approve_order:…)
+      if (data.startsWith('confirm_order:') || data.startsWith('approve_order:')) {
+        const prefix = data.startsWith('confirm_order:') ? 'confirm_order:' : 'approve_order:';
+        const rest = data.slice(prefix.length);
         const segs = rest.split(':').filter(Boolean);
         const planSuffixRe = /^(1D|7D|30D|90D|365D|1Y|TEST|TEST_1D|WEEKLY|MONTHLY|YEARLY|TST|WK|MO|3M|YR)$/i;
         const isCheckoutApprove =
           segs.length === 1 ||
           (segs.length === 2 && (/^ord_/i.test(segs[0]) || planSuffixRe.test(segs[1])));
-        if (segs.length >= 2 && !isCheckoutApprove) {
+        if (data.startsWith('approve_order:') && segs.length >= 2 && !isCheckoutApprove) {
           await handleApproveOrderCallback(cq);
           return okResponse();
         }
-        // Ack spinner early with required confirmation toast
-        await answerCallbackQuery(cq.id, 'داخوازی هاتە پەسەندکرن', false);
-        // Order approval → fall through to approval webhook
+        await answerCallbackQuery(cq.id, 'داخوازی هاتە پەسەندکرن!', false);
       }
 
       try {

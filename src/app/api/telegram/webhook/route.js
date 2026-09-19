@@ -37,7 +37,9 @@ export async function POST(req) {
     }
 
     const isApproveOrder =
-      data.startsWith('approve_order:') || data.startsWith('approve:');
+      data.startsWith('confirm_order:') ||
+      data.startsWith('approve_order:') ||
+      data.startsWith('approve:');
     const isRejectOrder = data.startsWith('reject_order:');
     const isApproveTopup = data.startsWith('approve_topup:');
     const isRejectTopup = data.startsWith('reject_topup:');
@@ -65,8 +67,8 @@ export async function POST(req) {
         messageId,
         text:
           `✅ باڵانس هاتە زێدەکرن\n` +
-          `🆔 \`${topupId}\`\n` +
-          `👤 \`${result.topup?.phone || ''}\`\n` +
+          `🆔 ${topupId}\n` +
+          `👤 ${result.topup?.phone || ''}\n` +
           `💵 ${Number(result.topup?.amount_iqd || 0).toLocaleString()} IQD`,
         isCaption: hasPhoto,
       });
@@ -80,16 +82,17 @@ export async function POST(req) {
       await editTelegramMessage({
         chatId,
         messageId,
-        text: `❌ داخوازییا باڵانسی هاتە ڕەتکرن\n🆔 \`${topupId}\``,
+        text: `❌ داخوازییا باڵانسی هاتە ڕەتکرن\n🆔 ${topupId}`,
         isCaption: hasPhoto,
       });
       return NextResponse.json({ ok: true });
     }
 
     if (isApproveOrder) {
-      const rest = data.startsWith('approve_order:')
-        ? data.slice('approve_order:'.length).trim()
-        : data.slice('approve:'.length).trim();
+      let rest = '';
+      if (data.startsWith('confirm_order:')) rest = data.slice('confirm_order:'.length).trim();
+      else if (data.startsWith('approve_order:')) rest = data.slice('approve_order:'.length).trim();
+      else rest = data.slice('approve:'.length).trim();
       const parts = rest.split(':').filter(Boolean);
       const orderId = parts[0] || '';
       const planIdFromCallback = parts[1] || '';
@@ -225,7 +228,7 @@ function isAccountServiceOrder({
 function accountApprovedMessage(productTitle, customerName, customerPhone, orderId) {
   const when = new Date().toLocaleString('en-GB', { timeZone: 'Asia/Baghdad', hour12: false });
   return (
-    `✅ پەسەندکر (Confirmed) — Account Service\n` +
+    `✅ داخوازی هاتە پەسەندکرن\n` +
     `━━━━━━━━━━━━━━━━━━━\n` +
     `🆔 ئۆردەر: ${orderId || '—'}\n` +
     `📅 کات: ${when}\n` +
@@ -233,7 +236,7 @@ function accountApprovedMessage(productTitle, customerName, customerPhone, order
     `👤 کڕیار: ${customerName}\n` +
     `📞 واتساپ: ${customerPhone || '—'}\n` +
     `━━━━━━━━━━━━━━━━━━━\n` +
-    `🖨 وەسڵ / Print:\n` +
+    `🖨 چاپکرنا وەسڵێ:\n` +
     `${getOrderReceiptUrl(orderId)}\n` +
     `━━━━━━━━━━━━━━━━━━━\n` +
     `تکایە زانیاریێن ئەکاونتی (ئیمەیڵ و پاسۆرد) ب ڕێکا واتساپێ بۆ کڕیاری بفرێژە.`
@@ -284,7 +287,7 @@ function approvedReceipt({
     .join(' ');
 
   return (
-    `✅ پەسەندکر (Confirmed)\n` +
+    `✅ داخوازی هاتە پەسەندکرن\n` +
     `━━━━━━━━━━━━━━━━━━━\n` +
     `🆔 ئۆردەر: ${orderId || '—'}\n` +
     `📅 کات: ${when}\n` +
@@ -295,14 +298,17 @@ function approvedReceipt({
     (paymentMethod ? `💳 پارەدان: ${paymentMethod}\n` : '') +
     (transactionId ? `🔢 وەسڵ: ${transactionId}\n` : '') +
     `━━━━━━━━━━━━━━━━━━━\n` +
-    `🔑 کلیلا چالاک:\n` +
+    `کۆدێ ئەکتیڤکرنێ:\n` +
     `${keyCode || '—'}\n` +
     `━━━━━━━━━━━━━━━━━━━\n` +
-    `🖨 وەسڵ / Print:\n` +
-    `${getOrderReceiptUrl(orderId)}\n` +
-    `━━━━━━━━━━━━━━━━━━━\n` +
-    `چاپ بکە یان بۆ کڕیاری بفرێژە.`
+    `🖨 چاپکرنا وەسڵێ:\n` +
+    `${getOrderReceiptUrl(orderId)}`
   );
+}
+
+function isFulfilledStatus(status) {
+  const s = String(status || '').toLowerCase();
+  return s === 'approved' || s === 'confirmed' || s === 'completed';
 }
 
 async function publishConfirmation({
@@ -325,7 +331,6 @@ async function publishConfirmation({
     parseMode: null,
     replyMarkup: markup,
   });
-  // Separate printable message (easy to forward) + receipt URL button
   await sendTelegramText({
     chatId,
     text,
@@ -333,16 +338,25 @@ async function publishConfirmation({
   });
 }
 
-async function markOrderApproved(orderId, extra = {}) {
+async function markOrderConfirmed(orderId, extra = {}) {
   if (!orderId) return;
-  const payload = {
-    status: 'approved',
+  const base = {
     updated_at: new Date().toISOString(),
     ...extra,
   };
-  const { error } = await supabaseAdmin.from('orders').update(payload).eq('id', orderId);
+  // Prefer "confirmed"; fall back to "approved" if DB constraint rejects it
+  let { error } = await supabaseAdmin
+    .from('orders')
+    .update({ ...base, status: 'confirmed' })
+    .eq('id', orderId);
   if (error) {
-    console.warn('Order approve update failed:', error.message);
+    ({ error } = await supabaseAdmin
+      .from('orders')
+      .update({ ...base, status: 'approved' })
+      .eq('id', orderId));
+  }
+  if (error) {
+    console.warn('Order confirm update failed:', error.message);
   }
 }
 
@@ -356,7 +370,7 @@ async function handleApprove({
   messageText,
 }) {
   // Stop Telegram loading spinner immediately (callback can only be answered once)
-  await answerCallbackQuery(callbackId, 'داخوازی هاتە پەسەندکرن', false);
+  await answerCallbackQuery(callbackId, 'داخوازی هاتە پەسەندکرن!', false);
 
   const { data: order } = await supabaseAdmin
     .from('orders')
@@ -410,22 +424,28 @@ async function handleApprove({
   // ——— Account Services: never generate IPBITS voucher keys ———
   if (accountService) {
     if (order?.id) {
-      await markOrderApproved(orderId, { plan_type: 'account_service' });
+      await markOrderConfirmed(orderId, { plan_type: 'account_service' });
     } else if (orderId) {
-      const { error: upsertErr } = await supabaseAdmin.from('orders').upsert(
-        {
-          id: orderId,
-          phone: phone || null,
-          customer_name: name !== '—' ? name : null,
-          customer_phone: phone || null,
-          items_label: productTitle,
-          plan_type: 'account_service',
-          status: 'approved',
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: 'id' }
-      );
-      if (upsertErr) console.warn('Account approve upsert skipped:', upsertErr.message);
+      const upsertPayload = {
+        id: orderId,
+        phone: phone || null,
+        customer_name: name !== '—' ? name : null,
+        customer_phone: phone || null,
+        items_label: productTitle,
+        plan_type: 'account_service',
+        status: 'confirmed',
+        updated_at: new Date().toISOString(),
+      };
+      let { error: upsertErr } = await supabaseAdmin
+        .from('orders')
+        .upsert(upsertPayload, { onConflict: 'id' });
+      if (upsertErr) {
+        upsertPayload.status = 'approved';
+        ({ error: upsertErr } = await supabaseAdmin
+          .from('orders')
+          .upsert(upsertPayload, { onConflict: 'id' }));
+      }
+      if (upsertErr) console.warn('Account confirm upsert skipped:', upsertErr.message);
     }
 
     const text = accountApprovedMessage(productTitle, name, phone, orderId);
@@ -442,7 +462,7 @@ async function handleApprove({
   }
 
   // ——— AI Hub only: generate voucher / license keys ———
-  if (order?.status === 'approved' && order.license_key) {
+  if (isFulfilledStatus(order?.status) && order.license_key) {
     const text = approvedReceipt({
       keyCode: order.license_key,
       name,
@@ -473,7 +493,7 @@ async function handleApprove({
       itemsLabel,
     });
   } catch (err) {
-    console.error('Key gen on approve failed:', err);
+    console.error('Key gen on confirm failed:', err);
     await sendTelegramText({
       chatId,
       text: `❌ دروستکرنا کلیلێ سەرنەکەوت:\n${err.message || 'Key error'}\n🆔 ${orderId || '—'}`,
@@ -481,21 +501,22 @@ async function handleApprove({
     return;
   }
 
+  const licenseUpdate = {
+    license_key: license.key_code,
+    license_key_id: license.id || null,
+    plan_type: planType,
+    duration_days: durationDays,
+    updated_at: new Date().toISOString(),
+  };
+
   if (order?.id) {
-    const { error: updErr } = await supabaseAdmin
+    let { error: updErr } = await supabaseAdmin
       .from('orders')
-      .update({
-        status: 'approved',
-        license_key: license.key_code,
-        license_key_id: license.id || null,
-        plan_type: planType,
-        duration_days: durationDays,
-        updated_at: new Date().toISOString(),
-      })
+      .update({ ...licenseUpdate, status: 'confirmed' })
       .eq('id', orderId);
 
     if (updErr) {
-      const { error: fallbackErr } = await supabaseAdmin
+      ({ error: updErr } = await supabaseAdmin
         .from('orders')
         .update({
           status: 'approved',
@@ -504,32 +525,38 @@ async function handleApprove({
           duration_days: durationDays,
           updated_at: new Date().toISOString(),
         })
-        .eq('id', orderId);
+        .eq('id', orderId));
+    }
 
-      if (fallbackErr) {
-        console.error('Order approve update failed:', fallbackErr);
-      }
+    if (updErr) {
+      console.error('Order confirm update failed:', updErr);
     }
   } else {
-    const { error: upsertErr } = await supabaseAdmin.from('orders').upsert(
-      {
-        id: orderId,
-        phone: phone || null,
-        customer_name: name !== '—' ? name : null,
-        customer_phone: phone || null,
-        status: 'approved',
-        license_key: license.key_code,
-        plan_type: planType,
-        duration_days: durationDays,
-        items_label: itemsLabel || productTitle || null,
-        total_iqd: totalIQD || null,
-        total_usd: totalUSD || null,
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: 'id' }
-    );
+    const upsertPayload = {
+      id: orderId,
+      phone: phone || null,
+      customer_name: name !== '—' ? name : null,
+      customer_phone: phone || null,
+      status: 'confirmed',
+      license_key: license.key_code,
+      plan_type: planType,
+      duration_days: durationDays,
+      items_label: itemsLabel || productTitle || null,
+      total_iqd: totalIQD || null,
+      total_usd: totalUSD || null,
+      updated_at: new Date().toISOString(),
+    };
+    let { error: upsertErr } = await supabaseAdmin
+      .from('orders')
+      .upsert(upsertPayload, { onConflict: 'id' });
     if (upsertErr) {
-      console.warn('Approve upsert skipped:', upsertErr.message);
+      upsertPayload.status = 'approved';
+      ({ error: upsertErr } = await supabaseAdmin
+        .from('orders')
+        .upsert(upsertPayload, { onConflict: 'id' }));
+    }
+    if (upsertErr) {
+      console.warn('Confirm upsert skipped:', upsertErr.message);
     }
   }
 
@@ -569,7 +596,7 @@ async function handleReject({
   const name = orderName(order) || parsed.name || '—';
   const phone = orderPhone(order) || parsed.phone || '—';
 
-  if (order?.status === 'approved') {
+  if (order?.status === 'approved' || order?.status === 'confirmed') {
     await sendTelegramText({
       chatId,
       text: `❌ ناتوانرێت ڕەت بکرێت — ئۆردەر بەری نوکە پەسەندکرییە.\n🆔 ${orderId}`,

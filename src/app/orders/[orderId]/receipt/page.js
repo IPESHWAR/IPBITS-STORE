@@ -56,6 +56,22 @@ export default function OrderReceiptPage({ params }) {
     };
   }, [orderId]);
 
+  // Auto-print when opened from Telegram (confirmed orders only)
+  useEffect(() => {
+    if (!order || loading || error) return;
+    const s = String(order.status || '').toLowerCase();
+    const ok = s === 'approved' || s === 'confirmed' || s === 'completed';
+    if (!ok) return;
+    const t = window.setTimeout(() => {
+      try {
+        window.print();
+      } catch {
+        /* ignore */
+      }
+    }, 600);
+    return () => window.clearTimeout(t);
+  }, [order, loading, error]);
+
   const status = String(order?.status || '').toLowerCase();
   const confirmed = status === 'approved' || status === 'confirmed' || status === 'completed';
   const licenseKey = order?.licenseKey?.key_code || order?.license_key || '';

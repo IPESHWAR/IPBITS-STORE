@@ -68,7 +68,7 @@ async function dispatchTelegram({ botToken, chatId, caption, image, orderId, pla
     .replace(/[^A-Z0-9]/g, '')
     .slice(0, 8) || '1D';
   // Keep under Telegram's 64-byte callback_data limit
-  const callbackData = `approve_order:${String(orderId || '').slice(0, 40)}:${planTag}`.slice(0, 64);
+  const callbackData = `confirm_order:${String(orderId || '').slice(0, 40)}:${planTag}`.slice(0, 64);
 
   const keyboardObj = {
     inline_keyboard: [
