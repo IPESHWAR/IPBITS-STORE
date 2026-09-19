@@ -525,11 +525,16 @@ export async function POST(req) {
           } catch {
             /* ignore */
           }
-          const rand = () => Math.random().toString(36).substring(2, 6).toUpperCase();
-          const code = `IPBITS-7D-${rand()}-${rand()}`;
+          const rand8 = () => {
+            const c = '23456789ABCDEFGHJKMNPQRSTUVWXYZ';
+            let s = '';
+            for (let i = 0; i < 8; i += 1) s += c[Math.floor(Math.random() * c.length)];
+            return s;
+          };
+          const code = `IPBITS-7D-${rand8()}`;
           await sendTelegramMessage(
             cq.message?.chat?.id,
-            `✅ داخوازی هاتە پەسەندکرن!\n\n🔑 کلیل: ${code}\n\n🖨 وەسڵ حازرە.`
+            `✅ ئۆردەر هاتە پەسەندکرن ب سەرکەفتیانە!\n🔑 کلیلا دروستکری:\n\`${code}\`\n👤 بۆ: pshwar farhad (07504060378)`
           );
         }
         return okResponse();
