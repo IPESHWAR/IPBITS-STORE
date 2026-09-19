@@ -125,49 +125,22 @@ export function inferPlanFromText(text = '') {
     .replace(/\bal\s*hub\b/g, 'ai hub');
   if (!hay.trim()) return null;
 
-  // 1 Day / Trial / تێست / تست / ١ ڕۆژ
-  if (
-    /تێست|تیست|تست|تجرب|trial|test[_\s-]?1d|1_day|1day|\b1\s*d\b|1\s*day|١\s*ڕۆژ|١\s*رۆژ|1\s*ڕۆژ|1\s*رۆژ|\bdaily\b|\btst\b|ai_bundle_1_day|٢٤\s*دەمژمێر|24\s*hour/.test(
-      hay
-    )
-  ) {
-    return SUBSCRIPTION_PLANS.test;
-  }
-
-  // 1 Year / ساڵانە / سالانە / ١ ساڵ (before monthly)
-  if (
-    /ساڵانە|سالانە|سنوي|yearly|annual|1_year|\b1y\b|365d|ai_bundle_1_year|١\s*ساڵ|١\s*سال|1\s*year|1\s*ساڵ|سالانه/.test(
-      hay
-    )
-  ) {
-    return SUBSCRIPTION_PLANS.yearly;
-  }
-
-  // 90 Days / ٣ مانگ / ٣ هەیڤی / ٩٠ ڕۆژ
-  if (
-    /٣\s*مانگ|٣\s*مەه|٣\s*هەیڤ|3\s*months?|3months|3_months|90_days|\b90d\b|٩٠\s*ڕۆژ|٩٠\s*رۆژ|90\s*ڕۆژ|90\s*رۆژ|90\s*days?|quarterly|ai_bundle_90/.test(
-      hay
-    )
-  ) {
-    return SUBSCRIPTION_PLANS.three_months;
-  }
-
-  // 7 Days / هەفتانە / حەفتیانە / ٧ ڕۆژ / week
-  if (
-    /هەفتانە|حەفتیانە|هفتانه|حفتیانه|أسبوعي|weekly|\bweek\b|7_days|\b7d\b|٧\s*ڕۆژ|٧\s*رۆژ|7\s*ڕۆژ|7\s*رۆژ|7\s*days?|ai_bundle_7_days/.test(
-      hay
-    )
-  ) {
+  // English storefront FIRST: "Weekly (7 Days)", "Monthly (30 Days)", etc.
+  if (/weekly\s*\(\s*7\s*days?\s*\)|\bweekly\b|\b7\s*days?\b|7_days|ai_bundle_7_days|هەفتانە|حەفتیانە|هفتانه|٧\s*ڕۆژ|٧\s*رۆژ/.test(hay)) {
     return SUBSCRIPTION_PLANS.weekly;
   }
-
-  // 30 Days / مانگانە / مەهانە / هەیڤانە / ٣٠ ڕۆژ
-  if (
-    /مانگانە|مەهانە|هەیڤانە|هیڤانه|شهري|monthly|\bmonth\b|30_days|\b30d\b|٣٠\s*ڕۆژ|٣٠\s*رۆژ|30\s*ڕۆژ|30\s*رۆژ|30\s*days?|ai_bundle_30_days/.test(
-      hay
-    )
-  ) {
+  if (/annual|yearly|\b365\s*days?\b|\b1\s*year\b|\b1y\b|1_year|ai_bundle_1_year|ساڵانە|سالانە|١\s*ساڵ|١\s*سال/.test(hay)) {
+    return SUBSCRIPTION_PLANS.yearly;
+  }
+  if (/3\s*months?|\b90\s*days?\b|90_days|quarterly|٣\s*هەیڤ|٣\s*مانگ|٣\s*مەه|٩٠\s*ڕۆژ|٩٠\s*رۆژ|ai_bundle_90/.test(hay)) {
+    return SUBSCRIPTION_PLANS.three_months;
+  }
+  if (/monthly\s*\(\s*30\s*days?\s*\)|\bmonthly\b|\b30\s*days?\b|30_days|ai_bundle_30_days|مانگانە|مەهانە|هەیڤانە|٣٠\s*ڕۆژ|٣٠\s*رۆژ/.test(hay)) {
     return SUBSCRIPTION_PLANS.monthly;
+  }
+  // 1 Day / Trial last — avoid "(x1)" / stray "1" stealing Weekly matches
+  if (/1\s*day|\b1\s*d\b|trial|\btest\b|daily|تێست|تیست|تست|١\s*ڕۆژ|١\s*رۆژ|ai_bundle_1_day|1_day|test_1d/.test(hay)) {
+    return SUBSCRIPTION_PLANS.test;
   }
 
   return null;

@@ -16,7 +16,7 @@ const MAX_RETRIES = 5;
 
 /** Dynamic duration prefixes: 1D / 7D / 30D / 90D / 365D (+ legacy aliases). */
 export const IPBITS_LICENSE_KEY_RE =
-  /^IPBITS-(1D|7D|30D|90D|365D|1Y|TST|WK|MO|3M|YR)-[A-Z0-9]{4,}$/i;
+  /^IPBITS-(1D|7D|30D|90D|365D|1Y|TST|WK|MO|3M|YR)-[A-Z0-9]{4,}(-[A-Z0-9]{4,})?$/i;
 
 export function normalizeLicenseKeyInput(raw) {
   return String(raw || '')
