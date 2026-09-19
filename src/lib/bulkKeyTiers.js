@@ -41,7 +41,7 @@ export const BULK_KEY_TIERS = {
     label: 'Yearly (365 days)',
     days: 365,
     limit_usd: 18.0,
-    amount_iqd: 50000,
+    amount_iqd: 78000,
     prefix: '365D',
   },
 };

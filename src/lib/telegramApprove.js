@@ -57,7 +57,7 @@ export function classifyOrderKind(items, itemsLabel = '', totalIQD = 0) {
   }
 
   // Exact AI Hub price match (fallback when name is localized only)
-  const aiPrices = [2500, 5000, 12000, 25000, 50000];
+  const aiPrices = [2500, 5000, 12000, 25000, 78000, 50000];
   const total = Number(totalIQD) || 0;
   if (aiPrices.some((p) => Math.abs(total - p) < 1)) {
     return { kind: 'ai', productName: list[0]?.name || itemsLabel || 'AI Hub' };
@@ -95,7 +95,8 @@ export function inferAiTier(items, totalIQD, itemsLabel = '') {
     [5000, 'weekly'],
     [12000, 'monthly'],
     [25000, '3months'],
-    [50000, 'yearly'],
+    [78000, 'yearly'],
+    [50000, 'yearly'], // legacy
   ];
   let best = 'daily';
   let bestDiff = Infinity;

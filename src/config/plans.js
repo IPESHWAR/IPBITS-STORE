@@ -53,9 +53,9 @@ export const SUBSCRIPTION_PLANS = {
   yearly: {
     id: 'yearly',
     name_badini: 'ساڵانە (١ ساڵ)',
-    price_iqd: 50000,
-    price_usd: 35.0,
-    credit_limit: 18.0, // $18.00
+    price_iqd: 78000,
+    price_usd: 50.0,
+    credit_limit: 18.0, // $18.00 OpenRouter cap (unchanged)
     duration_days: 365,
     storefront_id: '1_year',
     plan_type: 'yearly_1y',
@@ -179,7 +179,8 @@ export function inferPlanFromPrice({ totalIQD = 0, totalUSD = 0 } = {}) {
     [5000, 'weekly'],
     [12000, 'monthly'],
     [25000, 'three_months'],
-    [50000, 'yearly'],
+    [78000, 'yearly'],
+    [50000, 'yearly'], // legacy checkout amounts
   ];
   for (const [price, id] of byIqd) {
     if (Math.abs(iqd - price) < 1) return SUBSCRIPTION_PLANS[id];
@@ -189,7 +190,8 @@ export function inferPlanFromPrice({ totalIQD = 0, totalUSD = 0 } = {}) {
     [3.5, 'weekly'],
     [8, 'monthly'],
     [17, 'three_months'],
-    [35, 'yearly'],
+    [50, 'yearly'],
+    [35, 'yearly'], // legacy
   ];
   for (const [price, id] of byUsd) {
     if (Math.abs(usd - price) < 0.2) return SUBSCRIPTION_PLANS[id];

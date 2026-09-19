@@ -59,7 +59,8 @@ const TIERS = [
     labelEn: 'Yearly',
     durationEn: '1 Year',
     limit: 18.0,
-    iqd: 50000,
+    iqd: 78000,
+    usd: 50,
     prefix: '365D',
   },
 ];

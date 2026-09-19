@@ -241,7 +241,7 @@ export default function AdminVouchers({ initialTab = 'vouchers' }) {
   const countFor = (slug) => counts.find((c) => c.product_slug === slug);
 
   const printAmounts = useMemo(() => {
-    const set = new Set([5000, 10000, 25000, 50000, Number(amountIqd) || 0]);
+    const set = new Set([5000, 10000, 25000, 50000, 78000, Number(amountIqd) || 0]);
     vouchers.forEach((v) => {
       const n = Number(v.amount_iqd || 0);
       if (n > 0) set.add(n);
