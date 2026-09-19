@@ -132,7 +132,7 @@ export default function ProductPlanModal({ product, open, onClose, onConfirm }) 
                             {plan.duration || plan.name}
                           </span>
                         </div>
-                        <span className={`text-sm font-semibold shrink-0 tabular-nums ${active ? 'text-cyan-700 dark:text-cyan-200' : 'text-slate-900 dark:text-white'}`} dir="ltr">
+                        <span className={`text-sm font-semibold shrink-0 ${active ? 'text-cyan-700 dark:text-cyan-200' : 'text-slate-900 dark:text-white'}`}>
                           {formatMoney(lang, plan)}
                         </span>
                       </div>

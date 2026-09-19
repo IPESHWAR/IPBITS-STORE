@@ -280,7 +280,7 @@ export function CheckoutModal({
                         {s.manualOrderSuccessDesc}
                       </p>
                       {itemsLabel && <p className="text-[11px] text-slate-500 mb-1">{itemsLabel}</p>}
-                      <p className="text-emerald-400 font-bold text-xl mb-5 tabular-nums" dir="ltr">{displayTotal}</p>
+                      <p className="text-emerald-400 font-bold text-xl mb-5 tabular-nums">{displayTotal}</p>
                     </>
                   ) : (
                     <>
@@ -331,7 +331,7 @@ export function CheckoutModal({
                         {itemsLabel || '—'}
                       </p>
                     </div>
-                    <p className="shrink-0 text-emerald-400 font-bold text-xl tabular-nums tracking-tight" dir="ltr">
+                    <p className="shrink-0 text-emerald-400 font-bold text-xl tabular-nums tracking-tight">
                       {displayTotal}
                     </p>
                   </div>

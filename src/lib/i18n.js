@@ -31,7 +31,7 @@ export function isRtl(lang) {
   return normalizeLang(lang) !== 'en';
 }
 
-/** Storefront prices are always shown in USD ($) for every language. */
+/** Storefront prices are shown in USD ($) for every locale (ku / ar / en). */
 export function usesUsd(_lang) {
   return true;
 }
@@ -102,7 +102,7 @@ export function moneyFrom(item) {
 
 /**
  * Format a price for display. Always USD with a leading `$`.
- * Prefixed with LRM (\u200E) so `$12.00` stays LTR-readable inside RTL text.
+ * Prefixed with LRM (\u200E) so `$12.00` stays LTR-readable inside RTL (ku/ar) text.
  */
 export function formatPrice(lang, iqd, usd) {
   const amount = toUsdAmount(iqd, usd);
