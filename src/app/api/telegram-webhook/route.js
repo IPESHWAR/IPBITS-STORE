@@ -382,6 +382,11 @@ async function handleConfirmAcc(cq) {
 async function handleConfirmGeneric(cq) {
   const data = String(cq.data || '');
 
+  // Never hijack checkout confirm_order callbacks
+  if (data.startsWith('confirm_order:') || data.startsWith('approve_order:')) {
+    return;
+  }
+
   // Debug / smoke-test button from checkout: confirm_test / confirm:test
   if (
     data === 'confirm_test' ||
@@ -485,10 +490,46 @@ export async function POST(req) {
       const cq = body.callback_query;
       const data = String(cq.data || '');
 
-      if (data.startsWith('confirm:')) {
-        await handleConfirmGeneric(cq);
+      // Checkout Confirm (`confirm_order:`) → license gen — must run before legacy handlers
+      if (data.startsWith('confirm_order:') || data.startsWith('approve_order:')) {
+        const prefix = data.startsWith('confirm_order:') ? 'confirm_order:' : 'approve_order:';
+        const rest = data.slice(prefix.length);
+        const segs = rest.split(':').filter(Boolean);
+        const planSuffixRe =
+          /^(1D|7D|30D|90D|365D|1Y|TEST|TEST_1D|WEEKLY|MONTHLY|YEARLY|TST|WK|MO|3M|YR)$/i;
+        const isCheckoutApprove =
+          segs.length === 1 ||
+          (segs.length === 2 && (/^ord_/i.test(segs[0]) || planSuffixRe.test(segs[1])));
+
+        // Legacy phone+tier approve_order (no ord_ id) → AI Hub bulk path
+        if (data.startsWith('approve_order:') && segs.length >= 2 && !isCheckoutApprove) {
+          await handleApproveOrderCallback(cq);
+          return okResponse();
+        }
+
+        await answerCallbackQuery(cq.id, 'داخوازی هاتە پەسەندکرن!', false);
+
+        try {
+          const { POST: handleApprovalWebhook } = await import(
+            '@/app/api/telegram/webhook/route'
+          );
+          const forwarded = new Request(req.url, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify(body),
+          });
+          await handleApprovalWebhook(forwarded);
+        } catch (err) {
+          console.error('[telegram-webhook] confirm_order forward error:', err);
+          await answerCallbackQuery(cq.id, '❌ Handler error', true);
+          await sendTelegramMessage(
+            cq.message?.chat?.id,
+            `❌ پەسەندکرن سەرنەکەوت:\n${err.message || 'error'}`
+          );
+        }
         return okResponse();
       }
+
       if (data.startsWith('confirm_ai:')) {
         await handleConfirmAi(cq);
         return okResponse();
@@ -497,22 +538,17 @@ export async function POST(req) {
         await handleConfirmAcc(cq);
         return okResponse();
       }
-      // Checkout: confirm_order:<orderId>:<plan> (also legacy approve_order:…)
-      if (data.startsWith('confirm_order:') || data.startsWith('approve_order:')) {
-        const prefix = data.startsWith('confirm_order:') ? 'confirm_order:' : 'approve_order:';
-        const rest = data.slice(prefix.length);
-        const segs = rest.split(':').filter(Boolean);
-        const planSuffixRe = /^(1D|7D|30D|90D|365D|1Y|TEST|TEST_1D|WEEKLY|MONTHLY|YEARLY|TST|WK|MO|3M|YR)$/i;
-        const isCheckoutApprove =
-          segs.length === 1 ||
-          (segs.length === 2 && (/^ord_/i.test(segs[0]) || planSuffixRe.test(segs[1])));
-        if (data.startsWith('approve_order:') && segs.length >= 2 && !isCheckoutApprove) {
-          await handleApproveOrderCallback(cq);
-          return okResponse();
-        }
-        await answerCallbackQuery(cq.id, 'داخوازی هاتە پەسەندکرن!', false);
+      // Generic confirm:phone:product (NOT confirm_order)
+      if (
+        data === 'confirm_test' ||
+        data.startsWith('confirm_test') ||
+        /^confirm:(?!order\b)/i.test(data)
+      ) {
+        await handleConfirmGeneric(cq);
+        return okResponse();
       }
 
+      // Other callbacks (topup approve/reject, reject_order, …)
       try {
         const { POST: handleApprovalWebhook } = await import(
           '@/app/api/telegram/webhook/route'
@@ -559,7 +595,7 @@ export async function GET() {
     JSON.stringify({
       ok: true,
       endpoint: '/api/telegram-webhook',
-      features: ['/gen', 'confirm_ai', 'confirm_acc', 'approve_order'],
+      features: ['/gen', 'confirm_order', 'confirm_ai', 'confirm_acc', 'approve_order'],
     }),
     { status: 200, headers: { 'Content-Type': 'application/json' } }
   );
