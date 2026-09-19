@@ -9,6 +9,7 @@ import {
   editTelegramMessage,
   getAdminChatId,
   isAuthorizedAdminChat,
+  sendTelegramText,
   toWhatsAppDigits,
 } from '@/lib/telegramApprove';
 
@@ -219,11 +220,17 @@ function isAccountServiceOrder({
   return kind === 'account';
 }
 
-function accountApprovedMessage(productTitle, customerName, customerPhone) {
+function accountApprovedMessage(productTitle, customerName, customerPhone, orderId) {
+  const when = new Date().toLocaleString('en-GB', { timeZone: 'Asia/Baghdad', hour12: false });
   return (
-    `✅ داخوازییا ئەکاونتی هاتە پەسەندکرن!\n` +
+    `✅ پەسەندکر (Confirmed) — Account Service\n` +
+    `━━━━━━━━━━━━━━━━━━━\n` +
+    `🆔 ئۆردەر: ${orderId || '—'}\n` +
+    `📅 کات: ${when}\n` +
     `📦 بەرهەم: ${productTitle}\n` +
-    `👤 کڕیار: ${customerName} (${customerPhone || '—'})\n\n` +
+    `👤 کڕیار: ${customerName}\n` +
+    `📞 واتساپ: ${customerPhone || '—'}\n` +
+    `━━━━━━━━━━━━━━━━━━━\n` +
     `تکایە زانیاریێن ئەکاونتی (ئیمەیڵ و پاسۆرد) ب ڕێکا واتساپێ بۆ کڕیاری بفرێژە.`
   );
 }
@@ -244,6 +251,73 @@ function buildAccountWaKeyboard(cleanPhone, productTitle) {
       ],
     ],
   };
+}
+
+function approvedReceipt({
+  keyCode,
+  name,
+  phone,
+  orderId,
+  productTitle,
+  planSuffix,
+  durationDays,
+  totalIQD,
+  totalUSD,
+  paymentMethod,
+  transactionId,
+}) {
+  const when = new Date().toLocaleString('en-GB', { timeZone: 'Asia/Baghdad', hour12: false });
+  const money =
+    Number(totalUSD) > 0
+      ? `$${Number(totalUSD).toFixed(2)}` +
+        (Number(totalIQD) > 0 ? ` · IQD ${Number(totalIQD).toLocaleString('en-US')}` : '')
+      : Number(totalIQD) > 0
+        ? `IQD ${Number(totalIQD).toLocaleString('en-US')}`
+        : '—';
+  const planLine = [productTitle, planSuffix ? `(${planSuffix})` : '', durationDays ? `· ${durationDays} ڕۆژ` : '']
+    .filter(Boolean)
+    .join(' ');
+
+  return (
+    `✅ پەسەندکر (Confirmed)\n` +
+    `━━━━━━━━━━━━━━━━━━━\n` +
+    `🆔 ئۆردەر: ${orderId || '—'}\n` +
+    `📅 کات: ${when}\n` +
+    `👤 کڕیار: ${name || '—'}\n` +
+    `📞 واتساپ: ${phone || '—'}\n` +
+    `📦 پلان: ${planLine || '—'}\n` +
+    `💰 گشتی: ${money}\n` +
+    (paymentMethod ? `💳 پارەدان: ${paymentMethod}\n` : '') +
+    (transactionId ? `🔢 وەسڵ: ${transactionId}\n` : '') +
+    `━━━━━━━━━━━━━━━━━━━\n` +
+    `🔑 کلیلا چالاک:\n` +
+    `${keyCode || '—'}\n` +
+    `━━━━━━━━━━━━━━━━━━━\n` +
+    `🖨 ئەڤ پەیامە چاپ بکە یان بۆ کڕیاری بفرێژە.`
+  );
+}
+
+async function publishConfirmation({
+  chatId,
+  messageId,
+  hasPhoto,
+  text,
+  replyMarkup = { inline_keyboard: [] },
+}) {
+  await editTelegramMessage({
+    chatId,
+    messageId,
+    text,
+    isCaption: hasPhoto,
+    parseMode: null,
+    replyMarkup,
+  });
+  // Separate printable message (easy to forward / print)
+  await sendTelegramText({
+    chatId,
+    text,
+    replyMarkup: replyMarkup?.inline_keyboard?.length ? replyMarkup : undefined,
+  });
 }
 
 async function markOrderApproved(orderId, extra = {}) {
@@ -268,6 +342,9 @@ async function handleApprove({
   callbackId,
   messageText,
 }) {
+  // Stop Telegram loading spinner immediately (callback can only be answered once)
+  await answerCallbackQuery(callbackId, '⏳ پەسەندکرن…', false);
+
   const { data: order } = await supabaseAdmin
     .from('orders')
     .select('*')
@@ -281,6 +358,8 @@ async function handleApprove({
   const itemsLabel = order?.items_label || parsed.product || '';
   const totalIQD = Number(order?.total_iqd || 0);
   const totalUSD = Number(order?.total_usd || 0);
+  const paymentMethod = order?.payment_method || '';
+  const transactionId = order?.transaction_id || '';
   const productTitle = productTitleFromOrder(order, items, itemsLabel, parsed.product);
   const resolvedPlan = resolvePlanFromOrderContext({
     planId: planId || undefined,
@@ -308,24 +387,15 @@ async function handleApprove({
   });
 
   if (order?.status === 'rejected') {
-    await answerCallbackQuery(callbackId, '❌ Already rejected', true);
+    await sendTelegramText({
+      chatId,
+      text: `❌ ئەڤ ئۆردەرە بەری نوکە هاتە ڕەتکرن.\n🆔 ${orderId}`,
+    });
     return;
   }
 
   // ——— Account Services: never generate IPBITS voucher keys ———
   if (accountService) {
-    if (order?.status === 'approved' || order?.status === 'completed') {
-      await answerCallbackQuery(callbackId, '✅ داخوازییا ئەکاونتی هاتە پەسەندکرن', true);
-      await editTelegramMessage({
-        chatId,
-        messageId,
-        text: accountApprovedMessage(productTitle, name, phone),
-        isCaption: hasPhoto,
-        replyMarkup: buildAccountWaKeyboard(cleanPhone, productTitle),
-      });
-      return;
-    }
-
     if (order?.id) {
       await markOrderApproved(orderId, { plan_type: 'account_service' });
     } else if (orderId) {
@@ -345,12 +415,12 @@ async function handleApprove({
       if (upsertErr) console.warn('Account approve upsert skipped:', upsertErr.message);
     }
 
-    await answerCallbackQuery(callbackId, '✅ داخوازییا ئەکاونتی هاتە پەسەندکرن', true);
-    await editTelegramMessage({
+    const text = accountApprovedMessage(productTitle, name, phone, orderId);
+    await publishConfirmation({
       chatId,
       messageId,
-      text: accountApprovedMessage(productTitle, name, phone),
-      isCaption: hasPhoto,
+      hasPhoto,
+      text,
       replyMarkup: buildAccountWaKeyboard(cleanPhone, productTitle),
     });
     return;
@@ -358,13 +428,20 @@ async function handleApprove({
 
   // ——— AI Hub only: generate voucher / license keys ———
   if (order?.status === 'approved' && order.license_key) {
-    await answerCallbackQuery(callbackId, 'ئۆردەر چالاک بوویە ✅', true);
-    await editTelegramMessage({
-      chatId,
-      messageId,
-      text: approvedMessage(order.license_key, name, phone),
-      isCaption: hasPhoto,
+    const text = approvedReceipt({
+      keyCode: order.license_key,
+      name,
+      phone,
+      orderId,
+      productTitle,
+      planSuffix,
+      durationDays: order.duration_days || durationDays,
+      totalIQD,
+      totalUSD,
+      paymentMethod,
+      transactionId,
     });
+    await publishConfirmation({ chatId, messageId, hasPhoto, text });
     return;
   }
 
@@ -382,7 +459,10 @@ async function handleApprove({
     });
   } catch (err) {
     console.error('Key gen on approve failed:', err);
-    await answerCallbackQuery(callbackId, `❌ ${err.message || 'Key error'}`, true);
+    await sendTelegramText({
+      chatId,
+      text: `❌ دروستکرنا کلیلێ سەرنەکەوت:\n${err.message || 'Key error'}\n🆔 ${orderId || '—'}`,
+    });
     return;
   }
 
@@ -400,7 +480,6 @@ async function handleApprove({
       .eq('id', orderId);
 
     if (updErr) {
-      // Fallback if license_key_id column does not exist yet
       const { error: fallbackErr } = await supabaseAdmin
         .from('orders')
         .update({
@@ -417,7 +496,6 @@ async function handleApprove({
       }
     }
   } else {
-    // Order row missing — still fulfill; try a best-effort upsert so later lookups work
     const { error: upsertErr } = await supabaseAdmin.from('orders').upsert(
       {
         id: orderId,
@@ -428,6 +506,9 @@ async function handleApprove({
         license_key: license.key_code,
         plan_type: planType,
         duration_days: durationDays,
+        items_label: itemsLabel || productTitle || null,
+        total_iqd: totalIQD || null,
+        total_usd: totalUSD || null,
         updated_at: new Date().toISOString(),
       },
       { onConflict: 'id' }
@@ -437,21 +518,20 @@ async function handleApprove({
     }
   }
 
-  await answerCallbackQuery(callbackId, 'ئۆردەر چالاک بوویە ✅', true);
-  await editTelegramMessage({
-    chatId,
-    messageId,
-    text: approvedMessage(license.key_code, name, phone),
-    isCaption: hasPhoto,
+  const text = approvedReceipt({
+    keyCode: license.key_code,
+    name,
+    phone,
+    orderId,
+    productTitle,
+    planSuffix,
+    durationDays,
+    totalIQD,
+    totalUSD,
+    paymentMethod,
+    transactionId,
   });
-}
-
-function approvedMessage(keyCode, name, phone) {
-  return (
-    `✅ ئۆردەر هاتە پەسەندکرن ب سەرکەفتیانە!\n` +
-    `🔑 کلیلا دروستکری: \`${keyCode}\`\n` +
-    `👤 بۆ: ${name} (${phone || '—'})`
-  );
+  await publishConfirmation({ chatId, messageId, hasPhoto, text });
 }
 
 async function handleReject({
@@ -462,6 +542,8 @@ async function handleReject({
   callbackId,
   messageText,
 }) {
+  await answerCallbackQuery(callbackId, '❌ ڕەتکرن…', false);
+
   const { data: order } = await supabaseAdmin
     .from('orders')
     .select('*')
@@ -473,7 +555,10 @@ async function handleReject({
   const phone = orderPhone(order) || parsed.phone || '—';
 
   if (order?.status === 'approved') {
-    await answerCallbackQuery(callbackId, '❌ Already approved', true);
+    await sendTelegramText({
+      chatId,
+      text: `❌ ناتوانرێت ڕەت بکرێت — ئۆردەر بەری نوکە پەسەندکرییە.\n🆔 ${orderId}`,
+    });
     return;
   }
 
@@ -484,16 +569,21 @@ async function handleReject({
       .eq('id', orderId);
   }
 
-  await answerCallbackQuery(callbackId, '❌ هاتە ڕەتکرن', true);
+  const when = new Date().toLocaleString('en-GB', { timeZone: 'Asia/Baghdad', hour12: false });
+  const text =
+    `❌ ئۆردەر هاتە ڕەتکرن\n` +
+    `🆔 ${orderId}\n` +
+    `📅 کات: ${when}\n` +
+    `👤 ${name} (${phone})`;
+
   await editTelegramMessage({
     chatId,
     messageId,
-    text:
-      `❌ ئۆردەر هاتە ڕەتکرن\n` +
-      `🆔 \`${orderId}\`\n` +
-      `👤 ${name} (${phone})`,
+    text,
     isCaption: hasPhoto,
+    parseMode: null,
   });
+  await sendTelegramText({ chatId, text });
 }
 
 export async function GET() {

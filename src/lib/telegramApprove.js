@@ -187,7 +187,7 @@ export function isAuthorizedAdminChat(chat, adminChatId) {
   return false;
 }
 
-export async function answerCallbackQuery(callbackQueryId, text, showAlert = true) {
+export async function answerCallbackQuery(callbackQueryId, text, showAlert = false) {
   const botToken = getBotToken();
   if (!botToken || !callbackQueryId) return;
   await fetch(`https://api.telegram.org/bot${botToken}/answerCallbackQuery`, {
@@ -196,9 +196,27 @@ export async function answerCallbackQuery(callbackQueryId, text, showAlert = tru
     body: JSON.stringify({
       callback_query_id: callbackQueryId,
       text: String(text || '').slice(0, 180),
-      show_alert: showAlert,
+      show_alert: !!showAlert,
     }),
   }).catch(() => {});
+}
+
+export async function sendTelegramText({ chatId, text, replyMarkup, parseMode }) {
+  const botToken = getBotToken();
+  if (!botToken || chatId == null) return null;
+  const payload = {
+    chat_id: chatId,
+    text: String(text || ''),
+  };
+  if (parseMode) payload.parse_mode = parseMode;
+  if (replyMarkup) payload.reply_markup = replyMarkup;
+
+  const res = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  }).catch(() => null);
+  return res ? res.json().catch(() => ({})) : null;
 }
 
 export async function editTelegramMessage({
@@ -206,42 +224,59 @@ export async function editTelegramMessage({
   messageId,
   text,
   isCaption = false,
-  parseMode = 'HTML',
+  parseMode = null,
   replyMarkup = { inline_keyboard: [] },
 }) {
   const botToken = getBotToken();
-  if (!botToken || chatId == null || !messageId) return;
+  if (!botToken || chatId == null || !messageId) return { ok: false };
 
-  const endpoint = isCaption ? 'editMessageCaption' : 'editMessageText';
-  const payload = {
+  const bodyBase = {
     chat_id: chatId,
     message_id: messageId,
-    parse_mode: parseMode,
     reply_markup: replyMarkup,
   };
-  if (isCaption) payload.caption = text;
-  else payload.text = text;
+  if (parseMode) bodyBase.parse_mode = parseMode;
 
-  const res = await fetch(`https://api.telegram.org/bot${botToken}/${endpoint}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  }).catch(() => null);
+  async function attempt(endpoint, field) {
+    const payload = { ...bodyBase, [field]: text };
+    const res = await fetch(`https://api.telegram.org/bot${botToken}/${endpoint}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    }).catch(() => null);
+    if (!res) return { ok: false };
+    return res.json().catch(() => ({ ok: false }));
+  }
 
-  if (res && isCaption) {
-    const json = await res.json().catch(() => ({}));
-    if (!json.ok) {
-      await fetch(`https://api.telegram.org/bot${botToken}/editMessageText`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          chat_id: chatId,
-          message_id: messageId,
-          text,
-          parse_mode: parseMode,
-          reply_markup: replyMarkup,
-        }),
-      }).catch(() => {});
+  // Prefer caption edit for photo messages; fall back to text / no parse_mode
+  if (isCaption) {
+    let json = await attempt('editMessageCaption', 'caption');
+    if (json?.ok) return json;
+    // Retry without parse_mode
+    if (parseMode) {
+      delete bodyBase.parse_mode;
+      json = await attempt('editMessageCaption', 'caption');
+      if (json?.ok) return json;
     }
   }
+
+  let json = await attempt('editMessageText', 'text');
+  if (json?.ok) return json;
+  if (parseMode) {
+    delete bodyBase.parse_mode;
+    json = await attempt('editMessageText', 'text');
+  }
+  // Strip buttons if content edit failed
+  if (!json?.ok) {
+    await fetch(`https://api.telegram.org/bot${botToken}/editMessageReplyMarkup`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: chatId,
+        message_id: messageId,
+        reply_markup: { inline_keyboard: [] },
+      }),
+    }).catch(() => {});
+  }
+  return json || { ok: false };
 }

@@ -23,17 +23,36 @@ function getSupabaseAdmin() {
   return createClient(url, key);
 }
 
-function buildCaption({ name, phone, itemsFormatted, finalIQD, paymentMethod, transactionId, note, orderId, kind }) {
+function buildCaption({
+  name,
+  phone,
+  itemsFormatted,
+  finalIQD,
+  totalUSD,
+  paymentMethod,
+  transactionId,
+  note,
+  orderId,
+  kind,
+  planSuffix,
+}) {
   const kindLabel = kind === 'ai' ? 'AI Hub' : 'Account Service';
+  const usdLine =
+    Number(totalUSD) > 0 ? `\n💵 USD: $${Number(totalUSD).toFixed(2)}` : '';
+  const planLine = planSuffix ? `\n🏷 پلان: ${planSuffix}` : '';
   return (
     `🛍 داخوازیەکا نوی گەهشت! (IPBITS STORE)\n` +
     `━━━━━━━━━━━━━━━━━━━\n` +
     `🆔 ئۆردەر: ${orderId || '—'}\n` +
-    `🏷 جۆر: ${kindLabel}\n` +
+    `🏷 جۆر: ${kindLabel}` +
+    planLine +
+    `\n` +
     `👤 کڕیار: ${name || 'نەدیار'}\n` +
     `📞 واتساپ: ${phone || 'نینە'}\n` +
     `💳 ڕێکا پارەدانێ: ${paymentMethod || 'نەدیار'}\n` +
-    `💰 کۆژمێ گشتی: IQD ${Number(finalIQD || 0).toLocaleString()}\n` +
+    `💰 کۆژمێ گشتی: IQD ${Number(finalIQD || 0).toLocaleString('en-US')}` +
+    usdLine +
+    `\n` +
     `📦 بەرهەم: ${itemsFormatted || '—'}\n` +
     `🔢 کۆدێ وەسڵی: ${transactionId || 'نینە'}` +
     (note ? `\n📝 تێبینی: ${note}` : '') +
@@ -145,6 +164,7 @@ export async function POST(request) {
       const fullPayload = {
         ...baseOrderData,
         customer_name: customerName,
+        customer_phone: cleanPhone,
         items: Array.isArray(items) ? items : [{ name: itemsFormatted }],
         items_label: itemsFormatted,
         total_iqd: finalIQD,
@@ -177,11 +197,13 @@ export async function POST(request) {
       phone: cleanPhone,
       itemsFormatted,
       finalIQD,
+      totalUSD: Number(totalUSD) || 0,
       paymentMethod,
       transactionId: String(transactionId || '').trim() || 'نینە',
       note: customerNote,
       orderId,
       kind,
+      planSuffix: kind === 'ai' ? plan?.plan_suffix || '1D' : '',
     });
 
     let telegramOk = false;
