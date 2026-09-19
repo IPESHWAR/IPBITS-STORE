@@ -1,7 +1,10 @@
 import { NextResponse } from 'next/server';
 import { approveTopup, rejectTopup } from '@/lib/walletService';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
-import { fulfillTelegramConfirm } from '@/lib/fulfillTelegramConfirm';
+import {
+  handleInstantConfirmCallback,
+  isConfirmCallbackData,
+} from '@/lib/telegramConfirmInstant';
 import {
   answerCallbackQuery,
   editTelegramMessage,
@@ -12,8 +15,7 @@ import {
 
 export async function POST(req) {
   try {
-    const update = await req.json();
-
+    const update = await req.json().catch(() => null);
     if (!update?.callback_query) {
       return NextResponse.json({ ok: true });
     }
@@ -24,7 +26,6 @@ export async function POST(req) {
     const chatId = chat.id;
     const messageId = cq.message?.message_id;
     const hasPhoto = !!(cq.message?.photo && cq.message.photo.length);
-    const adminChatId = getAdminChatId();
 
     console.log('[telegram/webhook] callback_query received', {
       data,
@@ -33,6 +34,14 @@ export async function POST(req) {
       hasPhoto,
     });
 
+    // Confirm / approve — NO auth gate, NO DB required (guaranteed key)
+    if (isConfirmCallbackData(data)) {
+      const result = await handleInstantConfirmCallback(cq);
+      console.log('[telegram/webhook] instant confirm result', result);
+      return NextResponse.json({ ok: true, result });
+    }
+
+    const adminChatId = getAdminChatId();
     if (!isAuthorizedAdminChat(chat, adminChatId)) {
       console.warn('[telegram/webhook] unauthorized chat', {
         chatId: String(chatId || ''),
@@ -42,20 +51,16 @@ export async function POST(req) {
       return NextResponse.json({ ok: true });
     }
 
-    const isApproveOrder =
-      data.startsWith('confirm_order:') ||
-      data.startsWith('approve_order:') ||
-      data.startsWith('approve:');
     const isRejectOrder = data.startsWith('reject_order:');
     const isApproveTopup = data.startsWith('approve_topup:');
     const isRejectTopup = data.startsWith('reject_topup:');
 
-    if (!isApproveOrder && !isRejectOrder && !isApproveTopup && !isRejectTopup) {
+    if (!isRejectOrder && !isApproveTopup && !isRejectTopup) {
       await answerCallbackQuery(cq.id, 'Unknown action', true);
       return NextResponse.json({ ok: true });
     }
 
-    if (!supabaseAdmin && (isApproveTopup || isRejectTopup || isRejectOrder)) {
+    if (!supabaseAdmin) {
       await answerCallbackQuery(cq.id, '❌ Database not configured', true);
       return NextResponse.json({ ok: true });
     }
@@ -94,32 +99,33 @@ export async function POST(req) {
       return NextResponse.json({ ok: true });
     }
 
-    if (isApproveOrder) {
-      // Same bulletproof path as /api/telegram-webhook
-      const result = await fulfillTelegramConfirm(cq);
-      console.log('[telegram/webhook] confirm fulfilled', result);
-      return NextResponse.json({ ok: true, result });
-    }
-
     const orderId = data.slice('reject_order:'.length).trim();
     await answerCallbackQuery(cq.id, '❌ ڕەتکرن…', false);
-    if (supabaseAdmin && orderId) {
-      const { data: order } = await supabaseAdmin
-        .from('orders')
-        .select('status')
-        .eq('id', orderId)
-        .maybeSingle();
-      if (['approved', 'confirmed', 'completed'].includes(String(order?.status || '').toLowerCase())) {
-        await sendTelegramText({
-          chatId,
-          text: `❌ ناتوانرێت ڕەت بکرێت — ئۆردەر بەری نوکە پەسەندکرییە.\n🆔 ${orderId}`,
-        });
-        return NextResponse.json({ ok: true });
+    if (orderId) {
+      try {
+        const { data: order } = await supabaseAdmin
+          .from('orders')
+          .select('status')
+          .eq('id', orderId)
+          .maybeSingle();
+        if (
+          ['approved', 'confirmed', 'completed'].includes(
+            String(order?.status || '').toLowerCase()
+          )
+        ) {
+          await sendTelegramText({
+            chatId,
+            text: `❌ ناتوانرێت ڕەت بکرێت — ئۆردەر بەری نوکە پەسەندکرییە.\n🆔 ${orderId}`,
+          });
+          return NextResponse.json({ ok: true });
+        }
+        await supabaseAdmin
+          .from('orders')
+          .update({ status: 'rejected', updated_at: new Date().toISOString() })
+          .eq('id', orderId);
+      } catch (err) {
+        console.error('[telegram/webhook] reject persist failed:', err?.message || err);
       }
-      await supabaseAdmin
-        .from('orders')
-        .update({ status: 'rejected', updated_at: new Date().toISOString() })
-        .eq('id', orderId);
     }
     await editTelegramMessage({
       chatId,
@@ -140,5 +146,9 @@ export async function POST(req) {
 }
 
 export async function GET() {
-  return NextResponse.json({ ok: true, endpoint: '/api/telegram/webhook' });
+  return NextResponse.json({
+    ok: true,
+    endpoint: '/api/telegram/webhook',
+    features: ['confirm_order', 'approve_order', 'confirm:', 'approve:'],
+  });
 }
