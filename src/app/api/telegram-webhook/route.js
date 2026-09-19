@@ -510,8 +510,8 @@ export async function POST(req) {
           await handleApproveOrderCallback(cq);
           return okResponse();
         }
-        // Ack spinner early; approval handler may answer again (Telegram ignores duplicates)
-        await answerCallbackQuery(cq.id, '⏳ پەسەندکرن…', false);
+        // Ack spinner early with required confirmation toast
+        await answerCallbackQuery(cq.id, 'داخوازی هاتە پەسەندکرن', false);
         // Order approval → fall through to approval webhook
       }
 

@@ -5,9 +5,11 @@ import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { inferPlanFromText, resolvePlanFromOrderContext } from '@/config/plans';
 import {
   answerCallbackQuery,
+  buildReceiptKeyboard,
   classifyOrderKind,
   editTelegramMessage,
   getAdminChatId,
+  getOrderReceiptUrl,
   isAuthorizedAdminChat,
   sendTelegramText,
   toWhatsAppDigits,
@@ -231,6 +233,9 @@ function accountApprovedMessage(productTitle, customerName, customerPhone, order
     `👤 کڕیار: ${customerName}\n` +
     `📞 واتساپ: ${customerPhone || '—'}\n` +
     `━━━━━━━━━━━━━━━━━━━\n` +
+    `🖨 وەسڵ / Print:\n` +
+    `${getOrderReceiptUrl(orderId)}\n` +
+    `━━━━━━━━━━━━━━━━━━━\n` +
     `تکایە زانیاریێن ئەکاونتی (ئیمەیڵ و پاسۆرد) ب ڕێکا واتساپێ بۆ کڕیاری بفرێژە.`
   );
 }
@@ -293,7 +298,10 @@ function approvedReceipt({
     `🔑 کلیلا چالاک:\n` +
     `${keyCode || '—'}\n` +
     `━━━━━━━━━━━━━━━━━━━\n` +
-    `🖨 ئەڤ پەیامە چاپ بکە یان بۆ کڕیاری بفرێژە.`
+    `🖨 وەسڵ / Print:\n` +
+    `${getOrderReceiptUrl(orderId)}\n` +
+    `━━━━━━━━━━━━━━━━━━━\n` +
+    `چاپ بکە یان بۆ کڕیاری بفرێژە.`
   );
 }
 
@@ -302,21 +310,26 @@ async function publishConfirmation({
   messageId,
   hasPhoto,
   text,
-  replyMarkup = { inline_keyboard: [] },
+  orderId,
+  replyMarkup,
 }) {
+  const markup =
+    replyMarkup ||
+    (orderId ? buildReceiptKeyboard(orderId) : { inline_keyboard: [] });
+
   await editTelegramMessage({
     chatId,
     messageId,
     text,
     isCaption: hasPhoto,
     parseMode: null,
-    replyMarkup,
+    replyMarkup: markup,
   });
-  // Separate printable message (easy to forward / print)
+  // Separate printable message (easy to forward) + receipt URL button
   await sendTelegramText({
     chatId,
     text,
-    replyMarkup: replyMarkup?.inline_keyboard?.length ? replyMarkup : undefined,
+    replyMarkup: markup?.inline_keyboard?.length ? markup : undefined,
   });
 }
 
@@ -343,7 +356,7 @@ async function handleApprove({
   messageText,
 }) {
   // Stop Telegram loading spinner immediately (callback can only be answered once)
-  await answerCallbackQuery(callbackId, '⏳ پەسەندکرن…', false);
+  await answerCallbackQuery(callbackId, 'داخوازی هاتە پەسەندکرن', false);
 
   const { data: order } = await supabaseAdmin
     .from('orders')
@@ -416,12 +429,14 @@ async function handleApprove({
     }
 
     const text = accountApprovedMessage(productTitle, name, phone, orderId);
+    const waRows = buildAccountWaKeyboard(cleanPhone, productTitle).inline_keyboard || [];
     await publishConfirmation({
       chatId,
       messageId,
       hasPhoto,
       text,
-      replyMarkup: buildAccountWaKeyboard(cleanPhone, productTitle),
+      orderId,
+      replyMarkup: buildReceiptKeyboard(orderId, waRows),
     });
     return;
   }
@@ -441,7 +456,7 @@ async function handleApprove({
       paymentMethod,
       transactionId,
     });
-    await publishConfirmation({ chatId, messageId, hasPhoto, text });
+    await publishConfirmation({ chatId, messageId, hasPhoto, text, orderId });
     return;
   }
 
@@ -531,7 +546,7 @@ async function handleApprove({
     paymentMethod,
     transactionId,
   });
-  await publishConfirmation({ chatId, messageId, hasPhoto, text });
+  await publishConfirmation({ chatId, messageId, hasPhoto, text, orderId });
 }
 
 async function handleReject({

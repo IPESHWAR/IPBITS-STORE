@@ -172,6 +172,31 @@ export function getBotToken() {
   return process.env.TELEGRAM_BOT_TOKEN || '';
 }
 
+/** Public site origin for Telegram URL buttons (must be HTTPS). */
+export function getPublicAppUrl() {
+  const raw =
+    process.env.NEXT_PUBLIC_APP_URL ||
+    process.env.APP_URL ||
+    'https://www.ipbits.store';
+  return String(raw).replace(/\/$/, '');
+}
+
+export function getOrderReceiptUrl(orderId) {
+  const id = encodeURIComponent(String(orderId || '').trim());
+  return `${getPublicAppUrl()}/orders/${id}/receipt`;
+}
+
+/** Inline keyboard: open printable web receipt (+ optional extra rows). */
+export function buildReceiptKeyboard(orderId, extraRows = []) {
+  const url = getOrderReceiptUrl(orderId);
+  const rows = [
+    [{ text: '🖨 پرێنت / Receipt', url }],
+    ...extraRows,
+  ];
+  return { inline_keyboard: rows.filter((r) => Array.isArray(r) && r.length) };
+}
+
+
 /** Accept numeric chat id or @username from env */
 export function isAuthorizedAdminChat(chat, adminChatId) {
   if (!chat || !adminChatId) return false;
