@@ -763,10 +763,10 @@ export default function StorePage() {
                           {tierLang.name}
                         </span>
                         <div className="flex flex-col gap-0.5">
-                          <span className={`lm-tier-price text-sm font-extrabold tabular-nums ${isSelected ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-800 dark:text-zinc-200'}`}>
+                          <span className={`lm-tier-price text-sm font-extrabold tabular-nums ${isSelected ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-800 dark:text-zinc-200'}`} dir="ltr">
                             {formatPrice(lang, tierData.priceIQD, tierData.priceUSD)}
                           </span>
-                          <span className="lm-tier-old text-[10px] text-slate-400 dark:text-zinc-500 line-through tabular-nums">
+                          <span className="lm-tier-old text-[10px] text-slate-400 dark:text-zinc-500 line-through tabular-nums" dir="ltr">
                             {formatPrice(lang, tierData.oldPriceIQD, tierData.oldPriceUSD)}
                           </span>
                         </div>
@@ -782,10 +782,10 @@ export default function StorePage() {
                     {s.selectedPriceFor}:
                   </span>
                   <div className="flex items-baseline gap-2.5 mt-1 flex-wrap">
-                    <span className="text-2xl sm:text-3xl font-extrabold tracking-tight text-emerald-600 dark:text-emerald-400 tabular-nums">
+                    <span className="text-2xl sm:text-3xl font-extrabold tracking-tight text-emerald-600 dark:text-emerald-400 tabular-nums" dir="ltr">
                       {formatPrice(lang, currentTierData.priceIQD, currentTierData.priceUSD)}
                     </span>
-                    <span className="text-xs text-slate-400 dark:text-zinc-500 line-through tabular-nums">
+                    <span className="text-xs text-slate-400 dark:text-zinc-500 line-through tabular-nums" dir="ltr">
                       {formatPrice(lang, currentTierData.oldPriceIQD, currentTierData.oldPriceUSD)}
                     </span>
                   </div>
@@ -810,7 +810,9 @@ export default function StorePage() {
               >
                 <span>
                   {s.buyNowBtn} — {currentTierText.name} ·{' '}
-                  {formatPrice(lang, currentTierData.priceIQD, currentTierData.priceUSD)}
+                  <span dir="ltr" className="tabular-nums inline-block">
+                    {formatPrice(lang, currentTierData.priceIQD, currentTierData.priceUSD)}
+                  </span>
                 </span>
               </button>
             </motion.div>
@@ -959,9 +961,18 @@ export default function StorePage() {
                       </span>
                     ) : null}
                     <span className={`lm-product-price text-base sm:text-lg ${HEADING} block mb-4`}>
-                      {hasMultiplePlans(product)
-                        ? `${s.fromPrice} ${formatMoney(lang, startingPlan(product))}`
-                        : formatMoney(lang, product)}
+                      {hasMultiplePlans(product) ? (
+                        <>
+                          {s.fromPrice}{' '}
+                          <span dir="ltr" className="tabular-nums inline-block">
+                            {formatMoney(lang, startingPlan(product))}
+                          </span>
+                        </>
+                      ) : (
+                        <span dir="ltr" className="tabular-nums inline-block">
+                          {formatMoney(lang, product)}
+                        </span>
+                      )}
                     </span>
                   </div>
                   <button
@@ -1165,7 +1176,7 @@ export default function StorePage() {
                 {/* Price */}
                 <div className="flex items-center justify-between p-3.5 bg-slate-50 dark:bg-slate-950/60 rounded-2xl border border-slate-200 dark:border-slate-800/60">
                   <span className="text-xs text-slate-500 dark:text-slate-400">{s.selectedPriceFor}:</span>
-                  <span className="font-black text-xl text-transparent bg-clip-text bg-gradient-to-r from-emerald-600 to-cyan-500 dark:from-emerald-300 dark:to-cyan-200">
+                  <span className="font-black text-xl text-transparent bg-clip-text bg-gradient-to-r from-emerald-600 to-cyan-500 dark:from-emerald-300 dark:to-cyan-200 tabular-nums" dir="ltr">
                     {formatMoney(lang, quickViewProduct)}
                   </span>
                 </div>

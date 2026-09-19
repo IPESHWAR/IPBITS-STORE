@@ -31,8 +31,9 @@ export function isRtl(lang) {
   return normalizeLang(lang) !== 'en';
 }
 
-export function usesUsd(lang) {
-  return normalizeLang(lang) === 'en';
+/** Storefront prices are always shown in USD ($) for every language. */
+export function usesUsd(_lang) {
+  return true;
 }
 
 /** Convert USD → IQD using the store rate, rounded to nearest IQD_ROUND_TO. */
@@ -99,13 +100,13 @@ export function moneyFrom(item) {
   };
 }
 
+/**
+ * Format a price for display. Always USD with a leading `$`.
+ * Prefixed with LRM (\u200E) so `$12.00` stays LTR-readable inside RTL text.
+ */
 export function formatPrice(lang, iqd, usd) {
-  if (usesUsd(lang)) return `$${toUsdAmount(iqd, usd).toFixed(2)}`;
-  const amount = toIqdAmount(iqd, usd);
-  const formatted = amount.toLocaleString('en-US');
-  return normalizeLang(lang) === 'ar' || normalizeLang(lang) === 'ku'
-    ? `${formatted} د.ع`
-    : `${formatted} IQD`;
+  const amount = toUsdAmount(iqd, usd);
+  return `\u200E$${amount.toFixed(2)}`;
 }
 
 export function formatTotal(lang, totalIQD, totalUSD) {
@@ -128,7 +129,7 @@ export function toLocalizedNumber(value, lang) {
 export const TRANSLATIONS = {
   ku: {
     dir: 'rtl',
-    currency: 'IQD',
+    currency: 'USD',
     common: {
       storeName: 'IPBITS STORE',
       hubName: 'IPBITS AI HUB',
@@ -468,7 +469,7 @@ export const TRANSLATIONS = {
       tabHistory: 'مێژوو',
       phoneLabel: 'ژمارا مۆبایلێ یان ئیمەیل',
       phonePlaceholder: 'ژمارا مۆبایلێ یان ئیمەیلا خۆ بنڤیسە...',
-      customAmount: 'بڕێ تایبەت (IQD)',
+      customAmount: 'بڕێ تایبەت ($)',
       proceedBtn: 'بەردەوام بە بەرەڤ پارەدانێ',
       voucherLabel: 'کۆدێ کارتی بنڤیسە',
       voucherPlaceholder: 'XXXX-XXXX',
@@ -479,7 +480,7 @@ export const TRANSLATIONS = {
       payWithBalance: 'پارەدان ب ڕێکا باڵانسی',
       balanceTooLow: 'باڵانسێ تە بەس نینە بۆ ڤێ کڕینێ.',
       insufficientHint:
-        'باڵانسێ تە تێرا ناکەت (مایە: {amount} IQD). تو دشێی باڵانسی زێدە بکەی یان ب ڕاستەوخۆ پارەی بدەی',
+        'باڵانسێ تە تێرا ناکەت (مایە: {amount}). تو دشێی باڵانسی زێدە بکەی یان ب ڕاستەوخۆ پارەی بدەی',
       depleted: 'باڵانسێ تە ب دوماهیک هات، هیڤیە باڵانسێ خۆ نوو بکە',
       alertInvalidContact: 'هیڤیە خانەیێ ب دروستی تژی بکە',
       alertInvalidAmount: 'هیڤیە بڕەکێ دروست بنڤیسە',
@@ -544,7 +545,7 @@ export const TRANSLATIONS = {
   },
   ar: {
     dir: 'rtl',
-    currency: 'IQD',
+    currency: 'USD',
     common: {
       storeName: 'IPBITS STORE',
       hubName: 'IPBITS AI HUB',
@@ -883,7 +884,7 @@ export const TRANSLATIONS = {
       tabHistory: 'السجل',
       phoneLabel: 'رقم الهاتف أو البريد الإلكتروني',
       phonePlaceholder: 'اكتب رقم هاتفك أو بريدك...',
-      customAmount: 'مبلغ مخصص (IQD)',
+      customAmount: 'مبلغ مخصص ($)',
       proceedBtn: 'المتابعة إلى الدفع',
       voucherLabel: 'أدخل رمز البطاقة',
       voucherPlaceholder: 'XXXX-XXXX',
@@ -894,7 +895,7 @@ export const TRANSLATIONS = {
       payWithBalance: 'الدفع من رصيد الحساب',
       balanceTooLow: 'رصيدك غير كافٍ لهذه العملية.',
       insufficientHint:
-        'رصيدك لا يكفي (المتبقي: {amount} IQD). يمكنك شحن الرصيد أو الدفع مباشرة',
+        'رصيدك لا يكفي (المتبقي: {amount}). يمكنك شحن الرصيد أو الدفع مباشرة',
       depleted: 'رصيدك نفد، يرجى شحن رصيدك',
       alertInvalidContact: 'يرجى تعبئة الحقل بشكل صحيح',
       alertInvalidAmount: 'يرجى إدخال مبلغ صحيح',
@@ -1300,7 +1301,7 @@ export const TRANSLATIONS = {
       tabHistory: 'History',
       phoneLabel: 'Phone or Email',
       phonePlaceholder: 'Enter your phone or email...',
-      customAmount: 'Custom amount (IQD)',
+      customAmount: 'Custom amount ($)',
       proceedBtn: 'Continue to Payment',
       voucherLabel: 'Enter card code',
       voucherPlaceholder: 'XXXX-XXXX',
@@ -1311,7 +1312,7 @@ export const TRANSLATIONS = {
       payWithBalance: 'Pay with Account Balance',
       balanceTooLow: 'Your balance is not enough for this purchase.',
       insufficientHint:
-        'Your balance is not enough (left: {amount} IQD). You can top up or pay directly.',
+        'Your balance is not enough (left: {amount}). You can top up or pay directly.',
       depleted: 'Your balance has run out. Please top up your account.',
       alertInvalidContact: 'Please fill the field correctly',
       alertInvalidAmount: 'Please enter a valid amount',

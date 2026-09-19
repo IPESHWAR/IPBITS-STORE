@@ -227,7 +227,7 @@ export default function TopUpModal() {
 
               <div className="rounded-2xl border border-emerald-500/25 bg-gradient-to-br from-emerald-50 via-slate-50 to-emerald-50 dark:from-emerald-950/40 dark:via-slate-950/80 dark:to-emerald-950/40 p-3.5">
                 <p className="text-[10px] font-bold text-emerald-600 dark:text-emerald-300 mb-0.5">{w.availableBalance}</p>
-                <p className="text-xl font-black text-slate-900 dark:text-white">
+                <p className="text-xl font-black text-slate-900 dark:text-white tabular-nums" dir="ltr">
                   {formatPrice(lang, balanceIqd, balanceUsd)}
                 </p>
                 {phone && <p className="text-[10px] text-slate-500 mt-1 font-mono truncate">{phone}</p>}
@@ -298,12 +298,13 @@ export default function TopUpModal() {
                           <p className="text-[10px] text-slate-500 truncate">{tx.description}</p>
                         </div>
                         <span
-                          className={`text-xs font-black shrink-0 ${
+                          className={`text-xs font-black shrink-0 tabular-nums ${
                             tx.amount_iqd > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-500 dark:text-rose-300'
                           }`}
+                          dir="ltr"
                         >
-                          {tx.amount_iqd > 0 ? '+' : ''}
-                          {Number(tx.amount_iqd).toLocaleString()} IQD
+                          {tx.amount_iqd > 0 ? '+' : '−'}
+                          {formatPrice(lang, Math.abs(Number(tx.amount_iqd) || 0), Math.abs(Number(tx.amount_usd) || 0))}
                         </span>
                       </div>
                     ))
@@ -355,10 +356,9 @@ export default function TopUpModal() {
                               : 'bg-slate-50 border-slate-200 hover:border-slate-300 dark:bg-slate-950/60 dark:border-slate-800 dark:hover:border-slate-700'
                           }`}
                         >
-                          <span className="block text-sm font-black text-slate-900 dark:text-white">
-                            {p.amountIqd.toLocaleString()} IQD
+                          <span className="block text-sm font-black text-slate-900 dark:text-white tabular-nums" dir="ltr">
+                            {formatPrice(lang, p.amountIqd, p.amountUsd)}
                           </span>
-                          <span className="text-[10px] text-slate-500 dark:text-slate-400">${p.amountUsd.toFixed(2)}</span>
                           {active && <Check className="text-emerald-500 dark:text-emerald-400 mt-1" size={12} />}
                         </button>
                       );
