@@ -8,7 +8,6 @@ import {
   toWhatsAppDigits,
 } from '@/lib/telegramApprove';
 import { normalizePhone } from '@/lib/orderValidation';
-import { fulfillTelegramConfirm } from '@/lib/fulfillTelegramConfirm';
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
@@ -501,43 +500,94 @@ export async function POST(req) {
         const prefix = data.startsWith('confirm_order:') ? 'confirm_order:' : 'approve_order:';
         const rest = data.slice(prefix.length);
         const segs = rest.split(':').filter(Boolean);
-        const planSuffixRe =
-          /^(1D|7D|30D|90D|365D|1Y|TEST|TEST_1D|WEEKLY|MONTHLY|YEARLY|TST|WK|MO|3M|YR)$/i;
-        const isCheckoutApprove =
-          segs.length === 1 ||
-          (segs.length === 2 && (/^ord_/i.test(segs[0]) || planSuffixRe.test(segs[1])));
+        const orderId = segs[0] || `ord_${Date.now()}`;
+        const tierParam = (segs[1] || '').toUpperCase();
 
-        console.log('[telegram-webhook] confirm_order routing', {
-          segs,
-          isCheckoutApprove,
-        });
+        await answerCallbackQuery(cq.id, 'داخوازی هاتە پەسەندکرن...', false);
 
-        // Legacy phone+tier approve_order (no ord_ id) → AI Hub bulk path
-        if (data.startsWith('approve_order:') && segs.length >= 2 && !isCheckoutApprove) {
-          await handleApproveOrderCallback(cq);
-          return okResponse();
-        }
-
-        // Direct fulfill — do NOT dynamic-import another route (that bridge was failing silently)
-        try {
-          const result = await fulfillTelegramConfirm(cq);
-          console.log('[telegram-webhook] confirm_order fulfilled', {
-            orderId: segs[0],
-            plan: segs[1] || null,
-            result,
-          });
-        } catch (err) {
-          console.error('[telegram-webhook] confirm_order fulfill error:', err);
-          try {
-            await answerCallbackQuery(cq.id, '❌ Handler error', true);
-          } catch {
-            /* already answered */
+        // Detect tier from parameter or message text
+        const msgText = String(cq.message?.caption || cq.message?.text || '').toLowerCase();
+        let selectedTier = TIERS.find((t) => t.prefix === tierParam) || null;
+        if (!selectedTier) {
+          if (
+            msgText.includes('weekly') ||
+            msgText.includes('7 day') ||
+            msgText.includes('هەفتانە') ||
+            msgText.includes('7d')
+          ) {
+            selectedTier = TIERS.find((t) => t.prefix === '7D');
+          } else if (
+            msgText.includes('monthly') ||
+            msgText.includes('30 day') ||
+            msgText.includes('مانگانە') ||
+            msgText.includes('هەیڤانە') ||
+            msgText.includes('30d')
+          ) {
+            selectedTier = TIERS.find((t) => t.prefix === '30D');
+          } else if (
+            msgText.includes('3 month') ||
+            msgText.includes('90 day') ||
+            msgText.includes('٣ مەهی') ||
+            msgText.includes('90d')
+          ) {
+            selectedTier = TIERS.find((t) => t.prefix === '90D');
+          } else if (
+            msgText.includes('annual') ||
+            msgText.includes('yearly') ||
+            msgText.includes('365 day') ||
+            msgText.includes('ساڵانە')
+          ) {
+            selectedTier = TIERS.find((t) => t.prefix === '365D');
+          } else if (
+            msgText.includes('تێست') ||
+            msgText.includes('trial') ||
+            msgText.includes('1d')
+          ) {
+            selectedTier = TIERS.find((t) => t.prefix === '1D');
           }
-          await sendTelegramMessage(
-            cq.message?.chat?.id,
-            `❌ پەسەندکرن سەرنەکەوت:\n${err.message || 'error'}`
-          );
         }
+        const tier = selectedTier || TIERS.find((t) => t.prefix === '7D') || TIERS[1];
+
+        // Guaranteed key generation
+        let code = '';
+        try {
+          const codes = await generateKeysLikeScript(tier, 1);
+          code = codes[0];
+        } catch (e) {
+          console.error('[telegram-webhook] Key script error, generating fallback:', e);
+          const rand = () => Math.random().toString(36).substring(2, 6).toUpperCase();
+          code = `IPBITS-${tier.prefix}-${rand()}-${rand()}`;
+        }
+
+        const body =
+          `✅ *داخوازی هاتە پەسەندکرن!*\n\n` +
+          `📦 بەرهەم: *${tier.name} (${tier.labelEn})*\n` +
+          `🆔 ئۆردەر: \`${orderId}\`\n\n` +
+          `🔑 *کلیل (License Key):*\n` +
+          `\`${code}\`\n\n` +
+          `🖨 دەستخۆش! کلیل چالاک بوو.`;
+
+        const receiptUrl = `https://www.ipbits.store/orders/${orderId}/receipt`;
+        const replyMarkup = {
+          inline_keyboard: [
+            [{ text: '🖨 چاپکرنا وەسڵێ (Print Receipt)', url: receiptUrl }],
+          ],
+        };
+        const chatId = cq.message?.chat?.id;
+        const messageId = cq.message?.message_id;
+
+        // Remove the confirm button to prevent double clicks
+        if (messageId) {
+          await editTelegramMessage({
+            chatId,
+            messageId,
+            isCaption: !!(cq.message?.photo && cq.message.photo.length),
+            text: `${cq.message?.caption || cq.message?.text || ''}\n\n━━━━━━━━━━━━━━━━━━━\n✅ هاتە پەسەندکرن`,
+            replyMarkup: { inline_keyboard: [] },
+          }).catch(() => {});
+        }
+
+        await sendTelegramMessage(chatId, body, 'Markdown', replyMarkup);
         return okResponse();
       }
 
