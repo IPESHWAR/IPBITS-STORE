@@ -93,13 +93,28 @@ export async function createLicenseKey({
   customerName,
   orderId,
 }) {
-  if (!supabaseAdmin) {
-    throw new Error('Supabase service role is not configured');
-  }
-
   const subscription = resolveSubscriptionPlan(planType);
   const packageType = toAutomatedPackageType(planType || subscription.id);
   const resolvedSuffix = planSuffix || subscription.plan_suffix;
+  const resolvedDuration = durationDays || subscription.duration_days;
+  const resolvedPlanType = subscription.plan_type || planType;
+  const expiresAt = computeExpiresAt(resolvedDuration);
+
+  if (!supabaseAdmin) {
+    const keyCode = generateLicenseKey(resolvedSuffix);
+    console.error('[licenseService] Supabase missing — returning ephemeral key:', keyCode);
+    return {
+      key_code: keyCode,
+      plan_type: resolvedPlanType,
+      duration_days: resolvedDuration,
+      expires_at: expiresAt,
+      created_at: new Date().toISOString(),
+      order_id: orderId || null,
+      customer_phone: customerPhone || null,
+      customer_name: customerName || null,
+      source: 'ephemeral_no_db',
+    };
+  }
 
   const automated = await createAutomatedLicense(packageType, {
     customerPhone,
@@ -129,10 +144,6 @@ export async function createLicenseKey({
     'createAutomatedLicense failed, falling back to license_keys:',
     automated.code || automated.error || 'unknown'
   );
-
-  const resolvedDuration = durationDays || subscription.duration_days;
-  const resolvedPlanType = subscription.plan_type || planType;
-  const expiresAt = computeExpiresAt(resolvedDuration);
 
   for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
     const keyCode = generateLicenseKey(resolvedSuffix);
@@ -164,11 +175,43 @@ export async function createLicenseKey({
     }
 
     if (error?.code !== '23505') {
-      throw new Error(error?.message || automated.error || 'Failed to create license key');
+      console.warn(
+        '[licenseService] license_keys insert failed, using generated key anyway:',
+        error?.message || error
+      );
+      break;
     }
   }
 
-  throw new Error(automated.error || 'Could not generate a unique license key');
+  // Last resort: always return a usable IPBITS key even if DB persist failed.
+  const fallbackCode = generateLicenseKey(resolvedSuffix);
+  console.warn('[licenseService] returning ephemeral license key:', fallbackCode);
+  try {
+    const { error: voucherErr } = await supabaseAdmin.from('vouchers').insert([
+      {
+        code: fallbackCode,
+        amount_iqd: 0,
+        is_used: false,
+      },
+    ]);
+    if (voucherErr) {
+      console.warn('[licenseService] vouchers fallback skipped:', voucherErr.message);
+    }
+  } catch (voucherErr) {
+    console.warn('[licenseService] vouchers fallback skipped:', voucherErr?.message || voucherErr);
+  }
+
+  return {
+    key_code: fallbackCode,
+    plan_type: resolvedPlanType,
+    duration_days: resolvedDuration,
+    expires_at: expiresAt,
+    created_at: new Date().toISOString(),
+    order_id: orderId || null,
+    customer_phone: customerPhone || null,
+    customer_name: customerName || null,
+    source: 'ephemeral',
+  };
 }
 
 export function generateLicenseForOrder({

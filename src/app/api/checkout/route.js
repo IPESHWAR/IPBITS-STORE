@@ -62,13 +62,20 @@ function buildCaption({
 
 async function dispatchTelegram({ botToken, chatId, caption, image, orderId, planId }) {
   const targetChatId = '5305335340';
-  const planTag = String(planId || '1D')
-    .trim()
-    .toUpperCase()
-    .replace(/[^A-Z0-9]/g, '')
-    .slice(0, 8) || '1D';
-  // Keep under Telegram's 64-byte callback_data limit
-  const callbackData = `confirm_order:${String(orderId || '').slice(0, 40)}:${planTag}`.slice(0, 64);
+  const id = String(orderId || '').slice(0, 40);
+  const planTag = planId
+    ? String(planId)
+        .trim()
+        .toUpperCase()
+        .replace(/[^A-Z0-9]/g, '')
+        .slice(0, 8)
+    : '';
+  // Keep under Telegram's 64-byte callback_data limit.
+  // Account services omit plan tag so confirm does not force AI key generation.
+  const callbackData = (planTag ? `confirm_order:${id}:${planTag}` : `confirm_order:${id}`).slice(
+    0,
+    64
+  );
 
   const keyboardObj = {
     inline_keyboard: [

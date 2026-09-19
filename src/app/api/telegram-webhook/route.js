@@ -490,6 +490,12 @@ export async function POST(req) {
       const cq = body.callback_query;
       const data = String(cq.data || '');
 
+      console.log('[telegram-webhook] callback_query received', {
+        data,
+        chatId: String(cq.message?.chat?.id || ''),
+        messageId: cq.message?.message_id,
+      });
+
       // Checkout Confirm (`confirm_order:`) → license gen — must run before legacy handlers
       if (data.startsWith('confirm_order:') || data.startsWith('approve_order:')) {
         const prefix = data.startsWith('confirm_order:') ? 'confirm_order:' : 'approve_order:';
@@ -500,6 +506,11 @@ export async function POST(req) {
         const isCheckoutApprove =
           segs.length === 1 ||
           (segs.length === 2 && (/^ord_/i.test(segs[0]) || planSuffixRe.test(segs[1])));
+
+        console.log('[telegram-webhook] confirm_order routing', {
+          segs,
+          isCheckoutApprove,
+        });
 
         // Legacy phone+tier approve_order (no ord_ id) → AI Hub bulk path
         if (data.startsWith('approve_order:') && segs.length >= 2 && !isCheckoutApprove) {
@@ -518,7 +529,12 @@ export async function POST(req) {
             headers: { 'content-type': 'application/json' },
             body: JSON.stringify(body),
           });
-          await handleApprovalWebhook(forwarded);
+          const fwdRes = await handleApprovalWebhook(forwarded);
+          console.log('[telegram-webhook] confirm_order forwarded', {
+            status: fwdRes?.status,
+            orderId: segs[0],
+            plan: segs[1] || null,
+          });
         } catch (err) {
           console.error('[telegram-webhook] confirm_order forward error:', err);
           await answerCallbackQuery(cq.id, '❌ Handler error', true);

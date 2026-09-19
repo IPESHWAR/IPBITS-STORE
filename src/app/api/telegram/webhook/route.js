@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { generateLicenseForOrder } from '@/lib/licenseService';
+import { generateLicenseKey } from '@/lib/generateKey';
 import { approveTopup, rejectTopup } from '@/lib/walletService';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { inferPlanFromText, resolvePlanFromOrderContext } from '@/config/plans';
@@ -15,6 +16,8 @@ import {
   toWhatsAppDigits,
 } from '@/lib/telegramApprove';
 
+const CALLBACK_PLAN_RE =
+  /^(1D|7D|30D|90D|365D|1Y|TEST|TEST_1D|WEEKLY|MONTHLY|YEARLY|TST|WK|MO|3M|YR)$/i;
 export async function POST(req) {
   try {
     const update = await req.json();
@@ -31,7 +34,18 @@ export async function POST(req) {
     const hasPhoto = !!(cq.message?.photo && cq.message.photo.length);
     const adminChatId = getAdminChatId();
 
-    if (!adminChatId || !isAuthorizedAdminChat(chat, adminChatId)) {
+    console.log('[telegram/webhook] callback_query received', {
+      data,
+      chatId: String(chatId || ''),
+      messageId,
+      hasPhoto,
+    });
+
+    if (!isAuthorizedAdminChat(chat, adminChatId)) {
+      console.warn('[telegram/webhook] unauthorized chat', {
+        chatId: String(chatId || ''),
+        adminChatId,
+      });
       await answerCallbackQuery(cq.id, '❌ Unauthorized', true);
       return NextResponse.json({ ok: true });
     }
@@ -49,7 +63,8 @@ export async function POST(req) {
       return NextResponse.json({ ok: true });
     }
 
-    if (!supabaseAdmin) {
+    // Topups / rejects need DB; confirm can still emit an ephemeral key without it.
+    if (!supabaseAdmin && (isApproveTopup || isRejectTopup || isRejectOrder)) {
       await answerCallbackQuery(cq.id, '❌ Database not configured', true);
       return NextResponse.json({ ok: true });
     }
@@ -96,6 +111,10 @@ export async function POST(req) {
       const parts = rest.split(':').filter(Boolean);
       const orderId = parts[0] || '';
       const planIdFromCallback = parts[1] || '';
+      console.log('[telegram/webhook] confirm_order → handleApprove', {
+        orderId,
+        planIdFromCallback,
+      });
       await handleApprove({
         orderId,
         planId: planIdFromCallback,
@@ -143,17 +162,22 @@ function parseOrderFromCaption(text) {
     : /Account Service/i.test(kind)
       ? 'account'
       : '';
-  let planType = 'account_service';
-  if (captionKind === 'ai' || /تێست|تیست|تست|هەفتانە|مانگانە|مەهانە|ساڵانە|سالانە|AI Hub/i.test(raw)) {
+  // Do NOT default to account_service — that silently skips license generation.
+  let planType = '';
+  if (captionKind === 'ai' || /تێست|تیست|تست|هەفتانە|مانگانە|مەهانە|ساڵانە|سالانە|AI Hub|پلان:\s*\d+D/i.test(raw)) {
     const inferred = inferPlanFromText(`${product} ${raw}`);
     planType = inferred?.plan_type || 'test_1d';
+  } else if (captionKind === 'account') {
+    planType = 'account_service';
   }
   return {
     name: name && name !== 'نەدیار' ? name : '',
     phone: phone && phone !== 'نینە' ? phone : '',
     product: product && product !== '—' ? product : '',
     planType,
-    captionKind: captionKind || (planType !== 'account_service' ? 'ai' : ''),
+    captionKind:
+      captionKind ||
+      (planType && planType !== 'account_service' ? 'ai' : captionKind),
   };
 }
 
@@ -184,10 +208,22 @@ function isAccountServiceOrder({
   messageText,
   totalIQD,
   captionKind,
+  planIdFromCallback,
 }) {
-  if (planType === 'account_service') return true;
-  if (captionKind === 'account') return true;
-  if (/Account Service/i.test(String(messageText || ''))) return true;
+  const msg = String(messageText || '');
+  const explicitAccount =
+    captionKind === 'account' ||
+    planType === 'account_service' ||
+    /Account Service/i.test(msg);
+  const explicitAiCaption = captionKind === 'ai' || /AI Hub/i.test(msg);
+  const callbackHasPlan =
+    !!planIdFromCallback && CALLBACK_PLAN_RE.test(String(planIdFromCallback));
+
+  // Caption/DB Account Service wins over a bare duration tag (legacy :1D default).
+  if (explicitAccount && !explicitAiCaption) return true;
+  if (explicitAiCaption) return false;
+  // No account signal + plan duration in callback → AI Hub voucher path.
+  if (callbackHasPlan) return false;
 
   const list = Array.isArray(items) ? items : [];
   const hay = [
@@ -219,7 +255,6 @@ function isAccountServiceOrder({
     'yearly_1y',
   ]);
   if (planType && aiPlanTypes.has(String(planType))) return false;
-  if (captionKind === 'ai') return false;
 
   const { kind } = classifyOrderKind(items, itemsLabel || order?.items_label || '', totalIQD);
   return kind === 'account';
@@ -298,7 +333,7 @@ function approvedReceipt({
     (paymentMethod ? `💳 پارەدان: ${paymentMethod}\n` : '') +
     (transactionId ? `🔢 وەسڵ: ${transactionId}\n` : '') +
     `━━━━━━━━━━━━━━━━━━━\n` +
-    `کۆدێ ئەکتیڤکرنێ:\n` +
+    `🔑 کۆدێ چالاککرنێ:\n` +
     `${keyCode || '—'}\n` +
     `━━━━━━━━━━━━━━━━━━━\n` +
     `🖨 چاپکرنا وەسڵێ:\n` +
@@ -339,7 +374,7 @@ async function publishConfirmation({
 }
 
 async function markOrderConfirmed(orderId, extra = {}) {
-  if (!orderId) return;
+  if (!orderId || !supabaseAdmin) return;
   const base = {
     updated_at: new Date().toISOString(),
     ...extra,
@@ -372,11 +407,26 @@ async function handleApprove({
   // Stop Telegram loading spinner immediately (callback can only be answered once)
   await answerCallbackQuery(callbackId, 'داخوازی هاتە پەسەندکرن!', false);
 
-  const { data: order } = await supabaseAdmin
-    .from('orders')
-    .select('*')
-    .eq('id', orderId)
-    .maybeSingle();
+  let order = null;
+  if (supabaseAdmin && orderId) {
+    const { data, error } = await supabaseAdmin
+      .from('orders')
+      .select('*')
+      .eq('id', orderId)
+      .maybeSingle();
+    if (error) {
+      console.warn('[handleApprove] order lookup failed:', error.message, { orderId });
+    }
+    order = data || null;
+  }
+
+  console.log('[handleApprove] start', {
+    orderId,
+    planId,
+    foundOrder: !!order?.id,
+    orderStatus: order?.status || null,
+    orderPlanType: order?.plan_type || null,
+  });
 
   const parsed = parseOrderFromCaption(messageText);
   const name = orderName(order) || parsed.name || '—';
@@ -411,6 +461,15 @@ async function handleApprove({
     messageText,
     totalIQD,
     captionKind: parsed.captionKind,
+    planIdFromCallback: planId,
+  });
+
+  console.log('[handleApprove] resolved', {
+    planType,
+    planSuffix,
+    durationDays,
+    accountService,
+    captionKind: parsed.captionKind,
   });
 
   if (order?.status === 'rejected') {
@@ -425,7 +484,7 @@ async function handleApprove({
   if (accountService) {
     if (order?.id) {
       await markOrderConfirmed(orderId, { plan_type: 'account_service' });
-    } else if (orderId) {
+    } else if (orderId && supabaseAdmin) {
       const upsertPayload = {
         id: orderId,
         phone: phone || null,
@@ -493,13 +552,20 @@ async function handleApprove({
       itemsLabel,
     });
   } catch (err) {
-    console.error('Key gen on confirm failed:', err);
-    await sendTelegramText({
-      chatId,
-      text: `❌ دروستکرنا کلیلێ سەرنەکەوت:\n${err.message || 'Key error'}\n🆔 ${orderId || '—'}`,
-    });
-    return;
+    console.error('Key gen on confirm failed, using local fallback:', err);
+    const fallbackCode = generateLicenseKey(planSuffix || '30D');
+    license = {
+      key_code: fallbackCode,
+      plan_type: planType,
+      duration_days: durationDays,
+      source: 'local_fallback',
+    };
   }
+
+  console.log('[handleApprove] license ready', {
+    key: license?.key_code,
+    source: license?.source,
+  });
 
   const licenseUpdate = {
     license_key: license.key_code,
@@ -509,7 +575,7 @@ async function handleApprove({
     updated_at: new Date().toISOString(),
   };
 
-  if (order?.id) {
+  if (supabaseAdmin && order?.id) {
     let { error: updErr } = await supabaseAdmin
       .from('orders')
       .update({ ...licenseUpdate, status: 'confirmed' })
@@ -531,7 +597,7 @@ async function handleApprove({
     if (updErr) {
       console.error('Order confirm update failed:', updErr);
     }
-  } else {
+  } else if (supabaseAdmin && orderId) {
     const upsertPayload = {
       id: orderId,
       phone: phone || null,

@@ -164,8 +164,13 @@ export function buildConfirmOrderKeyboard({ orderId, phone, tier = 'daily', waUr
   });
 }
 
+/** Hardcoded production admin chat — always accept even if env is unset. */
+export const HARDCODED_ADMIN_CHAT_ID = '5305335340';
+
 export function getAdminChatId() {
-  return String(process.env.ADMIN_CHAT_ID || process.env.TELEGRAM_CHAT_ID || '');
+  return String(
+    process.env.ADMIN_CHAT_ID || process.env.TELEGRAM_CHAT_ID || HARDCODED_ADMIN_CHAT_ID
+  );
 }
 
 export function getBotToken() {
@@ -199,10 +204,12 @@ export function buildReceiptKeyboard(orderId, extraRows = []) {
 
 /** Accept numeric chat id or @username from env */
 export function isAuthorizedAdminChat(chat, adminChatId) {
-  if (!chat || !adminChatId) return false;
-  const configured = String(adminChatId).trim();
-  if (String(chat.id) === configured) return true;
-  if (String(chat.id) === '5305335340') return true;
+  if (!chat) return false;
+  const chatId = String(chat.id || '');
+  if (chatId === HARDCODED_ADMIN_CHAT_ID) return true;
+
+  const configured = String(adminChatId || getAdminChatId() || '').trim();
+  if (configured && chatId === configured) return true;
 
   const username = chat.username ? String(chat.username).replace(/^@/, '') : '';
   const configuredUser = configured.replace(/^@/, '');
