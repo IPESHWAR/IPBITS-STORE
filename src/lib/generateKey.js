@@ -12,16 +12,17 @@ function randomSegment(length = 4) {
 
 /**
  * Resolve plan duration tag for customer-facing codes.
- * 1D / 7D / 30D / 90D / 365D
+ * 1D / 7D / 30D / 90D / 365D — default 7D when unknown.
  */
-export function normalizePlanPrefix(planSuffix = '30D') {
-  const raw = String(planSuffix || '30D').toUpperCase().replace(/[^A-Z0-9]/g, '');
+export function normalizePlanPrefix(planSuffix = '7D') {
+  const raw = String(planSuffix || '7D').toUpperCase().replace(/[^A-Z0-9]/g, '');
   const aliases = {
     TST: '1D',
     '1DAY': '1D',
     DAY: '1D',
     DAILY: '1D',
     TEST: '1D',
+    TRIAL: '1D',
     WK: '7D',
     WEEK: '7D',
     WEEKLY: '7D',
@@ -38,14 +39,16 @@ export function normalizePlanPrefix(planSuffix = '30D') {
     ANNUAL: '365D',
     VIP: '30D',
   };
-  return aliases[raw] || raw || '30D';
+  const mapped = aliases[raw] || raw;
+  if (/^(1D|7D|30D|90D|365D)$/.test(mapped)) return mapped;
+  return '7D';
 }
 
 /**
  * Generate a license key: IPBITS-{PLAN}-{RANDOM8}
  * e.g. IPBITS-1D-N273WNU5, IPBITS-365D-K82M19PL
  */
-export function generateLicenseKey(planSuffix = '30D') {
+export function generateLicenseKey(planSuffix = '7D') {
   const suffix = normalizePlanPrefix(planSuffix);
   const random = randomSegment(8);
   return `IPBITS-${suffix}-${random}`;
@@ -54,7 +57,7 @@ export function generateLicenseKey(planSuffix = '30D') {
 /**
  * Customer-facing code — same format as generateLicenseKey (duration prefix + 8 chars).
  */
-export function generateShortLicenseCode(planSuffix = '30D') {
+export function generateShortLicenseCode(planSuffix = '7D') {
   return generateLicenseKey(planSuffix);
 }
 

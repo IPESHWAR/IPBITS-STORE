@@ -117,13 +117,15 @@ export function normalizePlanHaystack(text = '') {
 
 /**
  * Infer plan from free-text (item labels, captions, Kurdish/Arabic/English names).
- * Order matters: trial/1D before monthly so "تێست" never becomes 30D.
+ * Order matters: trial/1D and yearly/90d before monthly/weekly so short tags win correctly.
  */
 export function inferPlanFromText(text = '') {
-  const hay = normalizePlanHaystack(text);
+  const hay = normalizePlanHaystack(text)
+    // Tolerate "Al Hub" typo / OCR for "AI Hub"
+    .replace(/\bal\s*hub\b/g, 'ai hub');
   if (!hay.trim()) return null;
 
-  // 1 Day / Trial / تێست / تست
+  // 1 Day / Trial / تێست / تست / ١ ڕۆژ
   if (
     /تێست|تیست|تست|تجرب|trial|test[_\s-]?1d|1_day|1day|\b1\s*d\b|1\s*day|١\s*ڕۆژ|١\s*رۆژ|1\s*ڕۆژ|1\s*رۆژ|\bdaily\b|\btst\b|ai_bundle_1_day|٢٤\s*دەمژمێر|24\s*hour/.test(
       hay
@@ -132,36 +134,36 @@ export function inferPlanFromText(text = '') {
     return SUBSCRIPTION_PLANS.test;
   }
 
-  // 1 Year / ساڵانە (before monthly)
+  // 1 Year / ساڵانە / سالانە / ١ ساڵ (before monthly)
   if (
-    /ساڵانە|سالانە|سنوي|yearly|annual|1_year|\b1y\b|365d|ai_bundle_1_year|١\s*ساڵ|1\s*year|سالانه/.test(
+    /ساڵانە|سالانە|سنوي|yearly|annual|1_year|\b1y\b|365d|ai_bundle_1_year|١\s*ساڵ|١\s*سال|1\s*year|1\s*ساڵ|سالانه/.test(
       hay
     )
   ) {
     return SUBSCRIPTION_PLANS.yearly;
   }
 
-  // 90 Days / ٣ مانگ
+  // 90 Days / ٣ مانگ / ٣ هەیڤی / ٩٠ ڕۆژ
   if (
-    /٣\s*مانگ|٣\s*مەه|3\s*months?|3months|3_months|90_days|\b90d\b|٩٠\s*ڕۆژ|٩٠\s*رۆژ|90\s*ڕۆژ|quarterly|ai_bundle_90/.test(
+    /٣\s*مانگ|٣\s*مەه|٣\s*هەیڤ|3\s*months?|3months|3_months|90_days|\b90d\b|٩٠\s*ڕۆژ|٩٠\s*رۆژ|90\s*ڕۆژ|90\s*رۆژ|90\s*days?|quarterly|ai_bundle_90/.test(
       hay
     )
   ) {
     return SUBSCRIPTION_PLANS.three_months;
   }
 
-  // 7 Days / هەفتانە
+  // 7 Days / هەفتانە / حەفتیانە / ٧ ڕۆژ / week
   if (
-    /هەفتانە|هفتانه|أسبوعي|weekly|7_days|\b7d\b|٧\s*ڕۆژ|٧\s*رۆژ|7\s*ڕۆژ|7\s*رۆژ|7\s*days?|ai_bundle_7_days/.test(
+    /هەفتانە|حەفتیانە|هفتانه|حفتیانه|أسبوعي|weekly|\bweek\b|7_days|\b7d\b|٧\s*ڕۆژ|٧\s*رۆژ|7\s*ڕۆژ|7\s*رۆژ|7\s*days?|ai_bundle_7_days/.test(
       hay
     )
   ) {
     return SUBSCRIPTION_PLANS.weekly;
   }
 
-  // 30 Days / مانگانە / مەهانە
+  // 30 Days / مانگانە / مەهانە / هەیڤانە / ٣٠ ڕۆژ
   if (
-    /مانگانە|مەهانە|شهري|monthly|30_days|\b30d\b|٣٠\s*ڕۆژ|٣٠\s*رۆژ|30\s*ڕۆژ|30\s*رۆژ|30\s*days?|ai_bundle_30_days/.test(
+    /مانگانە|مەهانە|هەیڤانە|هیڤانه|شهري|monthly|\bmonth\b|30_days|\b30d\b|٣٠\s*ڕۆژ|٣٠\s*رۆژ|30\s*ڕۆژ|30\s*رۆژ|30\s*days?|ai_bundle_30_days/.test(
       hay
     )
   ) {
@@ -261,7 +263,7 @@ export function resolvePlanFromOrderContext({
     if (fromExplicit) return fromExplicit;
   }
 
-  return SUBSCRIPTION_PLANS.test;
+  return SUBSCRIPTION_PLANS.weekly;
 }
 
 export function listSubscriptionPlans() {

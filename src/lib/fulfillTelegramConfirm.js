@@ -5,7 +5,13 @@
 import { generateLicenseKey, normalizePlanPrefix } from '@/lib/generateKey';
 import { generateLicenseForOrder } from '@/lib/licenseService';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
-import { inferPlanFromText, resolvePlanFromOrderContext } from '@/config/plans';
+import {
+  inferPlanFromPrice,
+  inferPlanFromText,
+  resolvePlanFromOrderContext,
+  resolvePlanFromPlanId,
+  SUBSCRIPTION_PLANS,
+} from '@/config/plans';
 import {
   answerCallbackQuery,
   buildReceiptKeyboard,
@@ -18,6 +24,14 @@ import {
 const CALLBACK_PLAN_RE =
   /^(1D|7D|30D|90D|365D|1Y|TEST|TEST_1D|WEEKLY|MONTHLY|YEARLY|TST|WK|MO|3M|YR)$/i;
 
+const PLAN_BY_SUFFIX = {
+  '1D': SUBSCRIPTION_PLANS.test,
+  '7D': SUBSCRIPTION_PLANS.weekly,
+  '30D': SUBSCRIPTION_PLANS.monthly,
+  '90D': SUBSCRIPTION_PLANS.three_months,
+  '365D': SUBSCRIPTION_PLANS.yearly,
+};
+
 function parseCallback(data) {
   const raw = String(data || '');
   let rest = '';
@@ -29,6 +43,11 @@ function parseCallback(data) {
   return { orderId: parts[0] || '', planId: parts[1] || '' };
 }
 
+function isAiHubText(text) {
+  const t = String(text || '');
+  return /AI\s*Hub|Al\s*Hub|AIHub/i.test(t);
+}
+
 function parseCaption(text) {
   const raw = String(text || '');
   const nameMatch = raw.match(/👤\s*کڕیار:\s*(.+)/);
@@ -37,17 +56,21 @@ function parseCaption(text) {
   const planMatch = raw.match(/🏷\s*پلان:\s*([A-Za-z0-9]+)/);
   const productMatch =
     raw.match(/📦\s*بەرهەم:\s*(.+)/) ||
-    raw.match(/AI Hub\s*[-–:]\s*(.+)/i);
+    raw.match(/(?:AI|Al)\s*Hub\s*[-–:]\s*(.+)/i);
   const kind = String(kindMatch?.[1] || '').trim();
-  const captionKind = /AI Hub/i.test(kind) || /AI Hub/i.test(raw)
+  const captionKind = isAiHubText(kind) || isAiHubText(raw)
     ? 'ai'
     : /Account Service/i.test(kind) || /Account Service/i.test(raw)
       ? 'account'
       : '';
   let planType = '';
-  if (captionKind === 'ai' || /تێست|تیست|هەفت|مەهانە|ساڵانە|AI Hub/i.test(raw)) {
+  if (
+    captionKind === 'ai' ||
+    isAiHubText(raw) ||
+    /تێست|تیست|تست|هەفت|حەفت|مەهانە|مانگانە|هەیڤ|ساڵانە|سالانە/i.test(raw)
+  ) {
     const inferred = inferPlanFromText(`${productMatch?.[1] || ''} ${raw}`);
-    planType = inferred?.plan_type || 'test_1d';
+    planType = inferred?.plan_type || 'weekly_7d';
   } else if (captionKind === 'account') {
     planType = 'account_service';
   }
@@ -67,24 +90,111 @@ function isAccountService({ captionKind, planType, messageText, planId }) {
     captionKind === 'account' ||
     planType === 'account_service' ||
     /Account Service/i.test(msg);
-  const explicitAi = captionKind === 'ai' || /AI Hub/i.test(msg);
+  const explicitAi = captionKind === 'ai' || isAiHubText(msg);
   if (explicitAccount && !explicitAi) return true;
   if (explicitAi) return false;
   if (planId && CALLBACK_PLAN_RE.test(String(planId))) return false;
   return false;
 }
 
+/**
+ * Resolve plan suffix for IPBITS-{suffix}-… keys.
+ * Priority: callback planId → caption پلان line → message/product text → price → DB → 7D.
+ */
+function resolveConfirmPlan({
+  planId,
+  planFromCaption,
+  messageText,
+  productTitle,
+  items,
+  itemsLabel,
+  order,
+}) {
+  const candidates = [
+    planId,
+    planFromCaption,
+    order?.plan_type,
+    order?.duration_days != null ? `${order.duration_days}D` : '',
+  ].filter(Boolean);
+
+  for (const c of candidates) {
+    const fromId = resolvePlanFromPlanId(c);
+    if (fromId?.plan_suffix) {
+      return {
+        plan_suffix: normalizePlanPrefix(fromId.plan_suffix),
+        plan_type: fromId.plan_type,
+        duration_days: fromId.duration_days,
+        source: `id:${c}`,
+      };
+    }
+  }
+
+  const list = Array.isArray(items) ? items : [];
+  const itemHay = list
+    .map((i) => `${i?.id || ''} ${i?.planId || ''} ${i?.name || ''} ${i?.title || ''}`)
+    .join(' ');
+  const hay = [messageText, productTitle, itemsLabel, itemHay].filter(Boolean).join(' ');
+  const fromText = inferPlanFromText(hay);
+  if (fromText?.plan_suffix) {
+    return {
+      plan_suffix: normalizePlanPrefix(fromText.plan_suffix),
+      plan_type: fromText.plan_type,
+      duration_days: fromText.duration_days,
+      source: 'text',
+    };
+  }
+
+  const fromPrice = inferPlanFromPrice({
+    totalIQD: Number(order?.total_iqd || 0),
+    totalUSD: Number(order?.total_usd || 0),
+  });
+  if (fromPrice?.plan_suffix) {
+    return {
+      plan_suffix: normalizePlanPrefix(fromPrice.plan_suffix),
+      plan_type: fromPrice.plan_type,
+      duration_days: fromPrice.duration_days,
+      source: 'price',
+    };
+  }
+
+  const fromContext = resolvePlanFromOrderContext({
+    planId: planId || planFromCaption || undefined,
+    planType: order?.plan_type,
+    durationDays: order?.duration_days,
+    items,
+    itemsLabel,
+    messageText,
+    productTitle,
+    totalIQD: Number(order?.total_iqd || 0),
+    totalUSD: Number(order?.total_usd || 0),
+  });
+  if (fromContext?.plan_suffix) {
+    return {
+      plan_suffix: normalizePlanPrefix(fromContext.plan_suffix),
+      plan_type: fromContext.plan_type,
+      duration_days: fromContext.duration_days,
+      source: 'context',
+    };
+  }
+
+  // Safe default: weekly 7D (never throw / never silent-fail)
+  const weekly = PLAN_BY_SUFFIX['7D'];
+  return {
+    plan_suffix: '7D',
+    plan_type: weekly.plan_type,
+    duration_days: weekly.duration_days,
+    source: 'default_7d',
+  };
+}
+
 function buildConfirmMessage({ keyCode, orderId, name, phone, planSuffix }) {
   return (
     `✅ داخوازی هاتە پەسەندکرن\n` +
-    `━━━━━━━━━━━━━━━━━━━\n` +
+    `🔑 کۆدێ ئەکتیڤکرنێ: \`${keyCode || '—'}\`\n` +
+    (planSuffix ? `📦 پلان: ${planSuffix}\n` : '') +
     `🆔 ئۆردەر: ${orderId || '—'}\n` +
     `👤 کڕیار: ${name || '—'}\n` +
     `📞 واتساپ: ${phone || '—'}\n` +
-    (planSuffix ? `📦 پلان: ${planSuffix}\n` : '') +
-    `━━━━━━━━━━━━━━━━━━━\n` +
-    `🔑 کۆدێ ئەکتیڤکرنێ: ${keyCode || '—'}\n` +
-    `━━━━━━━━━━━━━━━━━━━\n` +
     `🖨 وەسڵ حازرە بۆ چاپکرنێ\n` +
     `${getOrderReceiptUrl(orderId)}`
   );
@@ -93,15 +203,12 @@ function buildConfirmMessage({ keyCode, orderId, name, phone, planSuffix }) {
 function buildAccountMessage({ orderId, name, phone, product }) {
   return (
     `✅ داخوازی هاتە پەسەندکرن\n` +
-    `━━━━━━━━━━━━━━━━━━━\n` +
     `🆔 ئۆردەر: ${orderId || '—'}\n` +
     `📦 بەرهەم: ${product || '—'}\n` +
     `👤 کڕیار: ${name || '—'}\n` +
     `📞 واتساپ: ${phone || '—'}\n` +
-    `━━━━━━━━━━━━━━━━━━━\n` +
     `🖨 وەسڵ حازرە بۆ چاپکرنێ\n` +
     `${getOrderReceiptUrl(orderId)}\n` +
-    `━━━━━━━━━━━━━━━━━━━\n` +
     `تکایە زانیاریێن ئەکاونتی (ئیمەیڵ و پاسۆرد) ب ڕێکا واتساپێ بۆ کڕیاری بفرێژە.`
   );
 }
@@ -116,9 +223,10 @@ async function publish({ chatId, messageId, hasPhoto, text, orderId, extraRows =
     parseMode: null,
     replyMarkup: markup,
   });
+  // Plain-text follow-up (no Markdown) so backticks still show the key clearly
   await sendTelegramText({
     chatId,
-    text,
+    text: text.replace(/`/g, ''),
     replyMarkup: markup,
   });
 }
@@ -249,22 +357,31 @@ export async function fulfillTelegramConfirm(cq, opts = {}) {
     return { ok: true, kind: 'account' };
   }
 
+  const resolved = resolveConfirmPlan({
+    planId,
+    planFromCaption: parsed.planFromCaption,
+    messageText,
+    productTitle,
+    items,
+    itemsLabel,
+    order,
+  });
+  const planSuffix = resolved.plan_suffix;
+  const planType = resolved.plan_type;
+  const durationDays = resolved.duration_days;
+
+  console.log('[fulfillTelegramConfirm] plan resolved', {
+    planSuffix,
+    planType,
+    durationDays,
+    source: resolved.source,
+  });
+
   // Already fulfilled — re-send existing key
   if (
     order?.license_key &&
     ['confirmed', 'approved', 'completed'].includes(String(order.status || '').toLowerCase())
   ) {
-    const plan = resolvePlanFromOrderContext({
-      planId: planId || parsed.planFromCaption,
-      planType: order.plan_type,
-      durationDays: order.duration_days,
-      items,
-      itemsLabel,
-      messageText,
-      productTitle,
-      totalIQD: Number(order.total_iqd || 0),
-      totalUSD: Number(order.total_usd || 0),
-    });
     await publish({
       chatId,
       messageId,
@@ -274,28 +391,12 @@ export async function fulfillTelegramConfirm(cq, opts = {}) {
         orderId,
         name,
         phone,
-        planSuffix: plan.plan_suffix,
+        planSuffix,
       }),
       orderId,
     });
     return { ok: true, kind: 'ai', key: order.license_key, reused: true };
   }
-
-  // Resolve plan: callback → caption پلان line → message text → DB → default 30D
-  const resolved = resolvePlanFromOrderContext({
-    planId: planId || parsed.planFromCaption || undefined,
-    planType: order?.plan_type || parsed.planType,
-    durationDays: order?.duration_days,
-    items,
-    itemsLabel,
-    messageText,
-    productTitle,
-    totalIQD: Number(order?.total_iqd || 0),
-    totalUSD: Number(order?.total_usd || 0),
-  });
-  const planSuffix = normalizePlanPrefix(resolved.plan_suffix || planId || '30D');
-  const planType = resolved.plan_type;
-  const durationDays = resolved.duration_days;
 
   // GUARANTEED key — never blocked by DB / OpenRouter
   let keyCode = generateLicenseKey(planSuffix);
@@ -350,5 +451,5 @@ export async function fulfillTelegramConfirm(cq, opts = {}) {
     orderId,
   });
 
-  return { ok: true, kind: 'ai', key: keyCode };
+  return { ok: true, kind: 'ai', key: keyCode, planSuffix, source: resolved.source };
 }
