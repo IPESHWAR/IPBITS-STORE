@@ -130,6 +130,7 @@ export default function Navbar({ onOpenCatalog }) {
   const isHome = pathname === '/';
 
   const openMenu = () => {
+    if (typeof window !== 'undefined' && window.matchMedia('(min-width: 768px)').matches) return;
     if (closeTimerRef.current) {
       clearTimeout(closeTimerRef.current);
       closeTimerRef.current = null;
@@ -244,9 +245,21 @@ export default function Navbar({ onOpenCatalog }) {
     goToSection('store');
   };
 
-  // Drawer slides from the reading-direction start side
+  // Drawer slides from the reading-direction edge
   const closedTranslate = isRtl ? 'translate-x-full' : '-translate-x-full';
-  const panelSide = isRtl ? 'right-0 border-l' : 'left-0 border-r';
+  const panelEdge = isRtl ? 'right-0 top-0 bottom-0 border-l' : 'left-0 top-0 bottom-0 border-r';
+
+  // Close mobile drawer if viewport grows to desktop
+  useEffect(() => {
+    const onResize = () => {
+      if (typeof window === 'undefined') return;
+      if (window.matchMedia('(min-width: 768px)').matches && (menuOpen || drawerMounted)) {
+        closeMenu();
+      }
+    };
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, [menuOpen, drawerMounted]);
 
   const centerLinks = [
     { id: 'store', label: m.navProducts },
@@ -260,17 +273,17 @@ export default function Navbar({ onOpenCatalog }) {
     !isChat &&
     drawerMounted &&
     createPortal(
-      <div className="fixed inset-0 z-[100] overflow-hidden touch-none md:hidden" role="presentation">
+      <div className="fixed inset-0 z-50 overflow-hidden touch-none md:hidden" role="presentation">
         {/* Backdrop */}
         <div
-          className={`fixed inset-0 bg-black/70 backdrop-blur-sm transition-opacity duration-300 ${
-            drawerVisible ? 'opacity-100' : 'opacity-0'
+          className={`absolute inset-0 z-50 bg-black/70 backdrop-blur-sm transition-opacity duration-300 ${
+            drawerVisible ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
           }`}
           aria-hidden="true"
           onClick={closeMenu}
         />
 
-        {/* Drawer Panel — 320px / 85vw; RTL from right, LTR from left */}
+        {/* Drawer Panel — mobile only; RTL from right, LTR from left */}
         <aside
           id="mobile-nav-drawer"
           ref={menuPanelRef}
@@ -278,7 +291,7 @@ export default function Navbar({ onOpenCatalog }) {
           aria-modal="true"
           aria-label={m.menu}
           dir={isRtl ? 'rtl' : 'ltr'}
-          className={`fixed top-0 bottom-0 z-[101] ${panelSide} h-[100dvh] max-h-[100dvh] w-[320px] max-w-[85vw] flex flex-col justify-between overflow-hidden pt-5 px-5 bg-[#0a0f12] text-white shadow-2xl border-white/10 transform transition-transform duration-300 ease-in-out ${
+          className={`fixed z-50 ${panelEdge} h-[100dvh] max-h-[100dvh] w-[320px] max-w-[85vw] flex flex-col justify-between overflow-hidden pt-5 px-5 bg-[#0a0f12] text-white shadow-2xl border-white/10 transform transition-transform duration-300 ease-in-out will-change-transform ${
             drawerVisible ? 'translate-x-0' : closedTranslate
           }`}
         >
@@ -399,7 +412,7 @@ export default function Navbar({ onOpenCatalog }) {
   return (
     <>
       <nav
-        className="fixed top-0 inset-x-0 z-50 h-16 backdrop-blur-xl border-b transition-colors duration-200 bg-[#F8FAFC]/80 border-slate-200/80 dark:bg-[#07080E]/80 dark:border-white/[0.08]"
+        className="fixed top-0 inset-x-0 z-40 h-16 backdrop-blur-xl border-b transition-colors duration-200 bg-[#F8FAFC]/80 border-slate-200/80 dark:bg-[#07080E]/80 dark:border-white/[0.08]"
         dir={dir}
       >
         <div className="max-w-7xl mx-auto h-full px-4 sm:px-6 lg:px-8 flex items-center justify-between gap-3 relative">
@@ -415,8 +428,9 @@ export default function Navbar({ onOpenCatalog }) {
             </span>
           </Link>
 
+          {/* Desktop horizontal nav — never tied to drawer transforms */}
           {!isChat && (
-            <div className="hidden md:flex absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 items-center gap-0.5">
+            <div className="hidden md:flex flex-1 items-center justify-center gap-0.5 px-2">
               {centerLinks.map((link) =>
                 link.href ? (
                   <Link key={link.href} href={link.href} className={CENTER_LINK}>
@@ -453,6 +467,34 @@ export default function Navbar({ onOpenCatalog }) {
               </button>
             ) : (
               <>
+                {/* Desktop language switcher */}
+                <div
+                  className="hidden md:flex items-center gap-0.5 rounded-xl border border-slate-200/80 dark:border-white/[0.08] bg-slate-100/60 dark:bg-white/[0.04] p-0.5"
+                  role="listbox"
+                  aria-label={m.language}
+                >
+                  {LANGS.map((item) => {
+                    const active = lang === item.id;
+                    return (
+                      <button
+                        key={item.id}
+                        type="button"
+                        role="option"
+                        aria-selected={active}
+                        onClick={() => setLang(item.id)}
+                        className={`px-2 py-1 rounded-lg text-[11px] font-medium transition-all cursor-pointer ${
+                          active
+                            ? 'bg-white dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 shadow-sm'
+                            : 'text-slate-500 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white'
+                        }`}
+                      >
+                        {item.label}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Theme — mobile */}
                 <button
                   type="button"
                   onClick={toggleTheme}
@@ -471,6 +513,8 @@ export default function Navbar({ onOpenCatalog }) {
                     />
                   )}
                 </button>
+
+                {/* Theme — desktop */}
                 <button
                   type="button"
                   onClick={toggleTheme}
@@ -489,10 +533,12 @@ export default function Navbar({ onOpenCatalog }) {
                     />
                   )}
                 </button>
+
+                {/* Hamburger — mobile only */}
                 <button
                   type="button"
                   onClick={toggleMenu}
-                  className={MENU_BTN}
+                  className={`${MENU_BTN} md:hidden`}
                   aria-expanded={menuOpen}
                   aria-haspopup="dialog"
                   aria-controls="mobile-nav-drawer"
