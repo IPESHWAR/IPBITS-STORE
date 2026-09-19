@@ -8,7 +8,7 @@ import {
   toWhatsAppDigits,
 } from '@/lib/telegramApprove';
 import { normalizePhone } from '@/lib/orderValidation';
-
+import { fulfillTelegramConfirm } from '@/lib/fulfillTelegramConfirm';
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
@@ -518,26 +518,21 @@ export async function POST(req) {
           return okResponse();
         }
 
-        await answerCallbackQuery(cq.id, 'داخوازی هاتە پەسەندکرن!', false);
-
+        // Direct fulfill — do NOT dynamic-import another route (that bridge was failing silently)
         try {
-          const { POST: handleApprovalWebhook } = await import(
-            '@/app/api/telegram/webhook/route'
-          );
-          const forwarded = new Request(req.url, {
-            method: 'POST',
-            headers: { 'content-type': 'application/json' },
-            body: JSON.stringify(body),
-          });
-          const fwdRes = await handleApprovalWebhook(forwarded);
-          console.log('[telegram-webhook] confirm_order forwarded', {
-            status: fwdRes?.status,
+          const result = await fulfillTelegramConfirm(cq);
+          console.log('[telegram-webhook] confirm_order fulfilled', {
             orderId: segs[0],
             plan: segs[1] || null,
+            result,
           });
         } catch (err) {
-          console.error('[telegram-webhook] confirm_order forward error:', err);
-          await answerCallbackQuery(cq.id, '❌ Handler error', true);
+          console.error('[telegram-webhook] confirm_order fulfill error:', err);
+          try {
+            await answerCallbackQuery(cq.id, '❌ Handler error', true);
+          } catch {
+            /* already answered */
+          }
           await sendTelegramMessage(
             cq.message?.chat?.id,
             `❌ پەسەندکرن سەرنەکەوت:\n${err.message || 'error'}`
