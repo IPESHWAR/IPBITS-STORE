@@ -467,9 +467,9 @@ export default function Navbar({ onOpenCatalog }) {
               </button>
             ) : (
               <>
-                {/* Desktop language switcher */}
+                {/* Desktop language switcher — segmented pill */}
                 <div
-                  className="hidden md:flex items-center gap-0.5 rounded-xl border border-slate-200/80 dark:border-white/[0.08] bg-slate-100/60 dark:bg-white/[0.04] p-0.5"
+                  className="hidden md:inline-flex items-center p-1 rounded-xl bg-white/[0.04] border border-white/[0.08] backdrop-blur-md gap-1"
                   role="listbox"
                   aria-label={m.language}
                 >
@@ -482,11 +482,11 @@ export default function Navbar({ onOpenCatalog }) {
                         role="option"
                         aria-selected={active}
                         onClick={() => setLang(item.id)}
-                        className={`px-2 py-1 rounded-lg text-[11px] font-medium transition-all cursor-pointer ${
+                        className={
                           active
-                            ? 'bg-white dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 shadow-sm'
-                            : 'text-slate-500 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white'
-                        }`}
+                            ? 'px-2.5 py-1 text-xs font-medium rounded-lg bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 transition-all duration-200 shadow-sm cursor-pointer'
+                            : 'px-2.5 py-1 text-xs font-medium rounded-lg text-slate-400 hover:text-white hover:bg-white/[0.05] transition-all duration-200 border border-transparent cursor-pointer'
+                        }
                       >
                         {item.label}
                       </button>
