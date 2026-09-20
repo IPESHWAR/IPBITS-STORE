@@ -343,16 +343,14 @@ export const LOCKED_PRODUCTS = [
       ar: 'اشتراك بلس وبطاقات الألعاب الرسمية',
       en: 'PlayStation Plus & official gift cards',
     },
-    priceIQD: 22000,
-    priceUSD: 15,
+    priceIQD: usdToIqd(16),
+    priceUSD: 16,
     filterGroup: 'other',
     brandColor: '#003791',
     brandIcon: 'playstation',
     deliveryType: 'instant',
     plans: [
-      { id: 'ps-ess-1m', duration: 'Essential (١ مەهـ)', price_iqd: 22000, price_usd: 15.0 },
-      { id: 'ps-ext-3m', duration: 'Extra (٣ مەهـ)', price_iqd: 55000, price_usd: 37.0 },
-      { id: 'ps-dlx-12m', duration: 'Deluxe (١٢ مەهـ)', price_iqd: 145000, price_usd: 97.0 },
+      { id: 'ps-ess-1m', duration: '(١ مەهـ) Essential', price_iqd: usdToIqd(16), price_usd: 16.0 },
     ],
   },
   {
@@ -456,9 +454,16 @@ const SLUG_ALIASES = {
 };
 
 const PLAN_ID_ALIASES = {
-  'ps-ess-1m': ['ps_plus_essential_1m', 'ps-plus-essential-1m'],
-  'ps-ext-3m': ['ps_plus_extra_3m', 'ps-plus-extra-3m'],
-  'ps-dlx-12m': ['ps_plus_deluxe_12m', 'ps-plus-deluxe-12m'],
+  'ps-ess-1m': [
+    'ps_plus_essential_1m',
+    'ps-plus-essential-1m',
+    'ps-ext-3m',
+    'ps_plus_extra_3m',
+    'ps-plus-extra-3m',
+    'ps-dlx-12m',
+    'ps_plus_deluxe_12m',
+    'ps-plus-deluxe-12m',
+  ],
   'chatgpt-1m': ['chatgpt'],
   'claude-1m': ['claude'],
   'gemini-1m': ['gemini'],
