@@ -1,6 +1,6 @@
 import { generateLicenseKey } from '@/lib/generateKey';
 import { computeExpiresAt, resolvePlanFromItems } from '@/lib/licensePlans';
-import { supabaseAdmin } from '@/lib/supabaseAdmin';
+import { getSupabaseAdmin, supabaseAdmin as supabaseAdminSingleton } from '@/lib/supabaseAdmin';
 import {
   createAutomatedLicense,
   provisionOpenRouterKeyForLicense,
@@ -11,6 +11,10 @@ import {
   resolvePlanFromOrderContext,
 } from '@/config/plans';
 import { VIP_POINTS_PER_USD } from '@/lib/vipPoints';
+
+function db() {
+  return getSupabaseAdmin() || supabaseAdminSingleton;
+}
 
 const MAX_RETRIES = 5;
 
@@ -102,7 +106,7 @@ export async function createLicenseKey({
   const resolvedPlanType = subscription.plan_type || planType;
   const expiresAt = computeExpiresAt(resolvedDuration);
 
-  if (!supabaseAdmin) {
+  if (!db()) {
     const keyCode = generateLicenseKey(resolvedSuffix);
     console.error('[licenseService] Supabase missing — returning ephemeral key:', keyCode);
     return {
@@ -150,7 +154,7 @@ export async function createLicenseKey({
   for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
     const keyCode = generateLicenseKey(resolvedSuffix);
 
-    const { data, error } = await supabaseAdmin
+    const { data, error } = await db()
       .from('license_keys')
       .insert({
         key_code: keyCode,
@@ -186,13 +190,46 @@ export async function createLicenseKey({
   }
 
   // Last resort: always return a usable IPBITS key even if DB persist failed.
+  // Chat unlock (/api/licenses/verify) looks up licenses.license_code first.
   const fallbackCode = generateLicenseKey(resolvedSuffix);
   console.warn('[licenseService] returning ephemeral license key:', fallbackCode);
+  const supabase = db();
   try {
-    const { error: voucherErr } = await supabaseAdmin.from('vouchers').insert([
+    const { error: licErr } = await supabase.from('licenses').insert({
+      license_code: fallbackCode,
+      openrouter_key: 'PENDING_LICENSE_SERVICE',
+      package_type: packageType,
+      duration_days: resolvedDuration,
+      is_active: true,
+    });
+    if (licErr) {
+      console.warn('[licenseService] licenses fallback skipped:', licErr.message);
+    }
+  } catch (licErr) {
+    console.warn('[licenseService] licenses fallback skipped:', licErr?.message || licErr);
+  }
+  try {
+    const { error: lkErr } = await supabase.from('license_keys').insert({
+      key_code: fallbackCode,
+      plan_type: resolvedPlanType,
+      duration_days: resolvedDuration,
+      customer_phone: customerPhone || null,
+      customer_name: customerName || null,
+      order_id: orderId || null,
+      is_active: true,
+      expires_at: expiresAt,
+    });
+    if (lkErr) {
+      console.warn('[licenseService] license_keys fallback skipped:', lkErr.message);
+    }
+  } catch (lkErr) {
+    console.warn('[licenseService] license_keys fallback skipped:', lkErr?.message || lkErr);
+  }
+  try {
+    const { error: voucherErr } = await supabase.from('vouchers').insert([
       {
         code: fallbackCode,
-        amount_iqd: 0,
+        amount_iqd: Number(subscription.price_iqd) || 0,
         is_used: false,
       },
     ]);
@@ -254,14 +291,22 @@ export function generateLicenseForOrder({
 
 async function lookupLicensesTable(cleanKey) {
   const selects = [
+    // Live production schema (no expires_at / credit_limit_usd)
+    'id, license_code, package_type, duration_days, is_active, customer_phone, customer_name, openrouter_key, created_at',
+    'id, license_code, package_type, duration_days, is_active, customer_phone, openrouter_key',
+    'id, license_code, package_type, duration_days, is_active',
+    // Newer / migrated schemas
     'id, license_code, package_type, duration_days, expires_at, is_active, credit_limit_usd, customer_phone, customer_name',
     'id, license_code, package_type, duration_days, expires_at, is_active, credit_limit_usd',
     'id, license_code, key_code, package_type, duration_days, expires_at, is_active, credit_limit_usd',
   ];
 
+  const supabase = db();
+  if (!supabase) return null;
+
   for (const columns of selects) {
     // Prefer exact eq after normalize (keys are stored uppercase).
-    let query = supabaseAdmin.from('licenses').select(columns).eq('license_code', cleanKey).limit(1);
+    let query = supabase.from('licenses').select(columns).eq('license_code', cleanKey).limit(1);
     let { data, error } = await query.maybeSingle();
 
     if (error && /column|schema cache|does not exist|relation/i.test(error.message || '')) {
@@ -270,7 +315,7 @@ async function lookupLicensesTable(cleanKey) {
 
     // Fallback: case-insensitive match if eq miss (legacy mixed-case rows)
     if (!data && !error) {
-      query = supabaseAdmin.from('licenses').select(columns).ilike('license_code', cleanKey).limit(1);
+      query = supabase.from('licenses').select(columns).ilike('license_code', cleanKey).limit(1);
       ({ data, error } = await query.maybeSingle());
       if (error && /column|schema cache|does not exist|relation/i.test(error.message || '')) {
         continue;
@@ -287,7 +332,7 @@ async function lookupLicensesTable(cleanKey) {
         plan_type: data.package_type || data.plan_type || 'ai_hub',
         package_type: data.package_type || null,
         duration_days: data.duration_days,
-        expires_at: data.expires_at,
+        expires_at: data.expires_at || null,
         credit_limit_usd: data.credit_limit_usd,
         customer_phone: data.customer_phone || null,
         customer_name: data.customer_name || null,
@@ -300,7 +345,7 @@ async function lookupLicensesTable(cleanKey) {
 }
 
 async function lookupLicenseKeysTable(cleanKey) {
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await db()
     .from('license_keys')
     .select('*')
     .eq('key_code', cleanKey)
@@ -311,7 +356,7 @@ async function lookupLicenseKeysTable(cleanKey) {
   }
 
   // Case-insensitive fallback
-  const { data: data2, error: error2 } = await supabaseAdmin
+  const { data: data2, error: error2 } = await db()
     .from('license_keys')
     .select('*')
     .ilike('key_code', cleanKey)
@@ -330,7 +375,7 @@ async function lookupOrdersLicense(cleanKey) {
   ];
 
   for (const columns of selects) {
-    const { data, error } = await supabaseAdmin
+    const { data, error } = await db()
       .from('orders')
       .select(columns)
       .eq('license_key', cleanKey)
@@ -359,7 +404,7 @@ async function lookupOrdersLicense(cleanKey) {
 }
 
 export async function activateLicenseKey({ keyCode, phone }) {
-  if (!supabaseAdmin) {
+  if (!db()) {
     throw new Error('Supabase service role is not configured');
   }
 
@@ -413,7 +458,7 @@ export async function activateLicenseKey({ keyCode, phone }) {
 }
 
 export async function findActiveLicenseByPhone(phone) {
-  if (!supabaseAdmin || !phone) return { ok: false, code: 'missing_phone' };
+  if (!db() || !phone) return { ok: false, code: 'missing_phone' };
 
   const raw = String(phone).trim();
   const digits = raw.replace(/\D/g, '');
@@ -421,7 +466,7 @@ export async function findActiveLicenseByPhone(phone) {
     Boolean
   );
 
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await db()
     .from('license_keys')
     .select('key_code, plan_type, duration_days, expires_at, customer_phone, customer_name, is_active')
     .eq('is_active', true)
@@ -452,7 +497,7 @@ export async function findActiveLicenseByPhone(phone) {
   ];
   let subs = [];
   for (const columns of subSelects) {
-    let query = supabaseAdmin.from('subscriptions').select(columns).in('phone', candidates).limit(8);
+    let query = db().from('subscriptions').select(columns).in('phone', candidates).limit(8);
     if (columns.includes('package_type')) {
       query = query.eq('package_type', 'ai_hub');
     }

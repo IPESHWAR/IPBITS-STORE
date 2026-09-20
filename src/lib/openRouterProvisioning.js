@@ -1,4 +1,4 @@
-import { supabaseAdmin } from '@/lib/supabaseAdmin';
+import { getSupabaseAdmin, supabaseAdmin as supabaseAdminSingleton } from '@/lib/supabaseAdmin';
 import { contactLookupKeys, normalizeWalletId } from '@/lib/wallet';
 import { decryptOpenRouterKey, encryptOpenRouterKey, maskOpenRouterKey } from '@/lib/openRouterKeyCrypto';
 import { planTypeFromLicense, resolveOpenRouterPlan } from '@/lib/openRouterPlans';
@@ -9,6 +9,10 @@ import {
   resolveSubscriptionPlan,
 } from '@/config/plans';
 import { generateShortLicenseCode } from '@/lib/generateKey';
+
+function db() {
+  return getSupabaseAdmin() || supabaseAdminSingleton;
+}
 
 const KEYS_URL = 'https://openrouter.ai/api/v1/keys';
 const MAX_CODE_RETRIES = 8;
@@ -112,8 +116,8 @@ export async function disableOpenRouterSubKey(hash) {
 }
 
 async function deactivateStoredKeys(phoneKeys, exceptId) {
-  if (!supabaseAdmin || !phoneKeys.length) return;
-  let query = supabaseAdmin
+  if (!db() || !phoneKeys.length) return;
+  let query = db()
     .from('openrouter_keys')
     .update({ status: 'disabled', disabled_at: new Date().toISOString() })
     .in('customer_phone', phoneKeys)
@@ -129,13 +133,13 @@ async function allocateShortLicenseCode(packageType, planSuffixOverride) {
     packageCodeSuffix(packageType === '3months' ? 'three_months' : packageType);
   for (let attempt = 0; attempt < MAX_CODE_RETRIES; attempt++) {
     const licenseCode = generateShortLicenseCode(suffix);
-    const { data: hit } = await supabaseAdmin
+    const { data: hit } = await db()
       .from('licenses')
       .select('id')
       .eq('license_code', licenseCode)
       .maybeSingle();
     if (!hit) {
-      const { data: legacy } = await supabaseAdmin
+      const { data: legacy } = await db()
         .from('license_keys')
         .select('id')
         .eq('key_code', licenseCode)
@@ -154,7 +158,7 @@ async function allocateShortLicenseCode(packageType, planSuffixOverride) {
  * @returns {Promise<{ ok: boolean, license_code?: string, package_type?: string, duration_days?: number, credit_limit_usd?: number, expires_at?: string, code?: string, error?: string }>}
  */
 export async function createAutomatedLicense(packageType, options = {}) {
-  if (!supabaseAdmin) {
+  if (!db()) {
     return { ok: false, code: 'db_unavailable' };
   }
 
@@ -184,19 +188,34 @@ export async function createAutomatedLicense(packageType, options = {}) {
   const licenseRow = {
     license_code: licenseCode,
     openrouter_key: encryptOpenRouterKey(created.key),
-    openrouter_hash: created.hash,
     package_type: pkg,
     duration_days: limits.expirationDays,
-    credit_limit_usd: limits.limit,
-    expires_at: expiresAt,
     is_active: true,
   };
+  // Optional columns present only on migrated schemas
+  const licenseRowFull = {
+    ...licenseRow,
+    openrouter_hash: created.hash,
+    credit_limit_usd: limits.limit,
+    expires_at: expiresAt,
+  };
 
-  const { data: insertedLicense, error: licenseErr } = await supabaseAdmin
+  let insertedLicense = null;
+  let licenseErr = null;
+  // Prefer live production columns first (no expires_at / credit_limit_usd)
+  ({ data: insertedLicense, error: licenseErr } = await db()
     .from('licenses')
     .insert(licenseRow)
-    .select('id, license_code, package_type, duration_days, credit_limit_usd, expires_at, is_active')
-    .single();
+    .select('id, license_code, package_type, duration_days, is_active')
+    .single());
+
+  if (licenseErr && /column|schema cache|does not exist/i.test(licenseErr.message || '')) {
+    ({ data: insertedLicense, error: licenseErr } = await db()
+      .from('licenses')
+      .insert(licenseRowFull)
+      .select('id, license_code, package_type, duration_days, is_active')
+      .single());
+  }
 
   if (licenseErr) {
     console.error('licenses insert failed:', licenseErr.message);
@@ -206,7 +225,7 @@ export async function createAutomatedLicense(packageType, options = {}) {
 
   // Keep redeem/activate path working (legacy license_keys + encrypted openrouter_keys).
   const phone = normalizeWalletId(options.customerPhone || '') || options.customerPhone || null;
-  const { error: mirrorLicenseErr } = await supabaseAdmin.from('license_keys').insert({
+  const { error: mirrorLicenseErr } = await db().from('license_keys').insert({
     key_code: licenseCode,
     plan_type: plan.plan_type,
     duration_days: limits.expirationDays,
@@ -220,7 +239,7 @@ export async function createAutomatedLicense(packageType, options = {}) {
     console.error('license_keys mirror failed:', mirrorLicenseErr.message);
   }
 
-  const { data: orRow, error: orErr } = await supabaseAdmin
+  const { data: orRow, error: orErr } = await db()
     .from('openrouter_keys')
     .insert({
       customer_phone: phone,
@@ -248,8 +267,8 @@ export async function createAutomatedLicense(packageType, options = {}) {
     license_code: insertedLicense.license_code,
     package_type: insertedLicense.package_type,
     duration_days: insertedLicense.duration_days,
-    credit_limit_usd: Number(insertedLicense.credit_limit_usd),
-    expires_at: insertedLicense.expires_at,
+    credit_limit_usd: limits.limit,
+    expires_at: expiresAt,
     is_active: insertedLicense.is_active,
     id: insertedLicense.id,
   };
@@ -260,7 +279,7 @@ export async function createAutomatedLicense(packageType, options = {}) {
  * with plan.credit_limit → encrypt with OPENROUTER_KEY_SECRET → store in openrouter_keys.
  */
 export async function provisionOpenRouterKeyForLicense(license) {
-  if (!supabaseAdmin || !license?.key_code) {
+  if (!db() || !license?.key_code) {
     return { ok: false, code: 'not_configured' };
   }
 
@@ -272,7 +291,7 @@ export async function provisionOpenRouterKeyForLicense(license) {
   const phoneKeys = phone ? contactLookupKeys(phone) : [];
   const orderId = license.order_id || license.orderId || '';
 
-  const { data: existing } = await supabaseAdmin
+  const { data: existing } = await db()
     .from('openrouter_keys')
     .select('id, or_hash, status, expires_at, license_key_code')
     .eq('license_key_code', license.key_code)
@@ -307,7 +326,7 @@ export async function provisionOpenRouterKeyForLicense(license) {
     status: 'active',
   };
 
-  const { data: inserted, error } = await supabaseAdmin
+  const { data: inserted, error } = await db()
     .from('openrouter_keys')
     .insert(row)
     .select('id')
@@ -333,7 +352,7 @@ export async function provisionOpenRouterKeyForLicense(license) {
 }
 
 export async function resolveProvisionedOpenRouterKey({ phone, licenseKey } = {}) {
-  if (!supabaseAdmin) return null;
+  if (!db()) return null;
 
   const candidates = [];
   if (phone) candidates.push(...contactLookupKeys(phone));
@@ -342,7 +361,7 @@ export async function resolveProvisionedOpenRouterKey({ phone, licenseKey } = {}
   const columns =
     'id, customer_phone, license_key_code, key_ciphertext, or_hash, credit_limit_usd, expires_at, status, plan_type';
 
-  let query = supabaseAdmin.from('openrouter_keys').select(columns).eq('status', 'active').limit(8);
+  let query = db().from('openrouter_keys').select(columns).eq('status', 'active').limit(8);
   const orParts = [];
   if (cleanLicense) orParts.push(`license_key_code.eq.${cleanLicense}`);
   if (candidates.length) orParts.push(...candidates.map((k) => `customer_phone.eq.${k}`));

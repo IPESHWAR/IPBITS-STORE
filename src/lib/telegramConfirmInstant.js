@@ -238,10 +238,13 @@ function pendingOpenRouterCipher() {
 }
 
 /**
- * Register key so /api/licenses/verify + chat unlock succeed.
- * Primary table: `licenses` (license_code) — matches browser schema.
- * Also: `license_keys` (key_code) + `vouchers` (is_used: false).
- * Uses SUPABASE_SERVICE_ROLE_KEY via supabaseAdmin (bypasses RLS).
+ * Register key so chat unlock succeeds.
+ * Activation path: ChatAccessGate → unlockAccessKey → /api/licenses/verify
+ * → activateLicenseKey, which selects:
+ *   1) licenses.license_code  (is_active !== false)
+ *   2) license_keys.key_code  (is_active !== false)
+ *   3) orders.license_key
+ * Also mirrors vouchers.code (is_used: false) for /api/vouchers/unlock fallback.
  */
 export async function persistRedeemableLicenseKey({
   code,
@@ -270,43 +273,50 @@ export async function persistRedeemableLicenseKey({
   const storeName = name && name !== DEFAULT_NAME ? name : null;
   const results = { license_keys: false, vouchers: false, orders: false, licenses: false };
 
-  // 1) licenses — EXACT schema from supabase/migrations/009_licenses.sql
-  //    Requires: license_code, openrouter_key, package_type, duration_days, is_active
+  // 1) licenses — LIVE schema:
+  //    license_code, openrouter_key, package_type, duration_days, is_active
+  //    (+ optional customer_phone). Do NOT send expires_at / credit_limit_usd —
+  //    those columns are absent on production and cause insert failure.
   try {
-    const licenseRow = {
-      license_code: code,
-      openrouter_key: pendingOpenRouterCipher(),
-      openrouter_hash: null,
-      package_type: packageType,
-      duration_days: durationDays,
-      credit_limit_usd: creditLimit,
-      expires_at: expiresAt,
-      is_active: true,
-    };
-    let { error } = await supabaseAdmin.from('licenses').insert(licenseRow);
-    if (error && /duplicate|unique|23505/i.test(error.message || '')) {
-      // Already exists — treat as registered
-      results.licenses = true;
-    } else if (error) {
-      console.error('[persist] licenses insert failed:', error.message, error.details || '');
-      // Retry without optional columns
-      ({ error } = await supabaseAdmin.from('licenses').insert({
+    const attempts = [
+      {
         license_code: code,
         openrouter_key: pendingOpenRouterCipher(),
         package_type: packageType,
         duration_days: durationDays,
         is_active: true,
+        customer_phone: storePhone,
+      },
+      {
+        license_code: code,
+        openrouter_key: pendingOpenRouterCipher(),
+        package_type: packageType,
+        duration_days: durationDays,
+        is_active: true,
+      },
+      // Migrated schema variants
+      {
+        license_code: code,
+        openrouter_key: pendingOpenRouterCipher(),
+        openrouter_hash: null,
+        package_type: packageType,
+        duration_days: durationDays,
+        credit_limit_usd: creditLimit,
         expires_at: expiresAt,
-      }));
-      if (error && /duplicate|unique|23505/i.test(error.message || '')) {
+        is_active: true,
+      },
+    ];
+    for (const licenseRow of attempts) {
+      const { error } = await supabaseAdmin.from('licenses').insert(licenseRow);
+      if (!error || /duplicate|unique|23505/i.test(error.message || '')) {
         results.licenses = true;
-      } else if (error) {
-        console.error('[persist] licenses retry failed:', error.message);
-      } else {
-        results.licenses = true;
+        break;
       }
-    } else {
-      results.licenses = true;
+      if (!/column|schema cache|does not exist/i.test(error.message || '')) {
+        console.error('[persist] licenses insert failed:', error.message, error.details || '');
+        break;
+      }
+      console.warn('[persist] licenses column mismatch, retrying:', error.message);
     }
   } catch (err) {
     console.error('[persist] licenses exception:', err?.message || err);

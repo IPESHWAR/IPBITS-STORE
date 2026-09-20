@@ -138,12 +138,58 @@ async function generateKeysLikeScript(tier, count) {
   }
 
   const { generateLicenseKey } = await import('@/lib/generateKey');
+  const { encryptOpenRouterKey } = await import('@/lib/openRouterKeyCrypto');
   const codes = [];
   for (let i = 1; i <= count; i += 1) {
     const code = generateLicenseKey(tier.prefix);
 
-    await createOpenRouterKey(`${code}-${Date.now()}`, tier.limit);
+    let orKey = null;
+    try {
+      orKey = await createOpenRouterKey(`${code}-${Date.now()}`, tier.limit);
+    } catch (err) {
+      console.warn('[generateKeys] OpenRouter skipped:', err?.message || err);
+    }
 
+    // Primary activation table for chat unlock (/api/licenses/verify)
+    const durationDays =
+      tier.prefix === '1D'
+        ? 1
+        : tier.prefix === '7D'
+          ? 7
+          : tier.prefix === '30D'
+            ? 30
+            : tier.prefix === '90D'
+              ? 90
+              : 365;
+    const expiresAt = new Date(Date.now() + durationDays * 86400000).toISOString();
+    let openrouterStored = orKey || 'PENDING_BULK_GEN';
+    try {
+      if (orKey) openrouterStored = encryptOpenRouterKey(orKey);
+    } catch {
+      /* keep plaintext placeholder */
+    }
+
+    const { error: licErr } = await supabase.from('licenses').insert({
+      license_code: code,
+      openrouter_key: openrouterStored,
+      package_type: tier.id,
+      duration_days: durationDays,
+      is_active: true,
+    });
+    if (licErr) {
+      throw new Error(`licenses: ${licErr.message}`);
+    }
+
+    // Mirror for activateLicenseKey fallback path
+    await supabase.from('license_keys').insert({
+      key_code: code,
+      plan_type: tier.id,
+      duration_days: durationDays,
+      is_active: true,
+      expires_at: expiresAt,
+    });
+
+    // Also vouchers (bulk-script compatibility / wallet unlock)
     const { error } = await supabase.from('vouchers').insert([
       {
         code,
@@ -151,9 +197,8 @@ async function generateKeysLikeScript(tier, count) {
         is_used: false,
       },
     ]);
-
-    if (error) {
-      throw new Error(`Supabase: ${error.message}`);
+    if (error && !/duplicate|unique|23505/i.test(error.message || '')) {
+      console.warn('[generateKeys] vouchers:', error.message);
     }
 
     codes.push(code);

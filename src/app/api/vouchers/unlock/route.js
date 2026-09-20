@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { supabaseAdmin } from '@/lib/supabaseAdmin';
+import { getSupabaseAdmin, supabaseAdmin as supabaseAdminSingleton } from '@/lib/supabaseAdmin';
 import { listSubscriptionPlans, computePlanExpiresAt } from '@/config/plans';
 import {
   activateLicenseKey,
@@ -9,6 +9,10 @@ import {
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
+
+function db() {
+  return getSupabaseAdmin() || supabaseAdminSingleton;
+}
 
 /** Map voucher IQD amount → closest AI Hub plan (duration / plan_type). */
 function planFromAmountIqd(amountIqd) {
@@ -36,7 +40,7 @@ function planFromAmountIqd(amountIqd) {
  */
 export async function POST(req) {
   try {
-    if (!supabaseAdmin) {
+    if (!db()) {
       const error = { message: 'db_unavailable' };
       console.log('Unlock Error:', error);
       return NextResponse.json(
@@ -57,27 +61,22 @@ export async function POST(req) {
       );
     }
 
-    // Telegram / AI Hub license keys live in licenses / license_keys — not vouchers.
+    // Chat gate primary path: licenses.license_code / license_keys.key_code
+    // via activateLicenseKey (same as /api/licenses/verify).
     if (enteredCode.startsWith('IPBITS-') || isValidIpbitsLicenseFormat(enteredCode)) {
       const result = await activateLicenseKey({ keyCode: enteredCode });
-      if (!result.ok) {
-        return NextResponse.json(
-          {
-            ok: false,
-            success: false,
-            error: 'invalid_or_used',
-            code: result.code,
-          },
-          { status: 400 }
-        );
+      if (result.ok) {
+        return NextResponse.json({
+          ok: true,
+          success: true,
+          license: result.license,
+        });
       }
-      return NextResponse.json({
-        ok: true,
-        success: true,
-        license: result.license,
-      });
+      // Fall through to vouchers — bulk/script IPBITS codes live there
+      // (code + is_used: false), matching generate-bulk-keys.mjs.
     }
 
+    const supabaseAdmin = db();
     const { data: voucher, error } = await supabaseAdmin
       .from('vouchers')
       .select('*')
