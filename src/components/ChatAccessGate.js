@@ -33,7 +33,11 @@ export default function ChatAccessGate({ onUnlocked, initialKey = '' }) {
     try {
       const result = await unlockAccessKey(next);
       if (!result.ok || !result.license) {
-        setError(g.gateInvalidKey || '');
+        setError(
+          result.code === 'device_limit' && result.error
+            ? result.error
+            : g.gateInvalidKey || ''
+        );
         setShake(true);
         window.setTimeout(() => setShake(false), 450);
         return;

@@ -3,6 +3,8 @@
  * License keys look like IPBITS-1D-XXXX; vouchers are separate codes in `vouchers`.
  */
 
+import { getOrCreateClientDeviceId } from '@/lib/licenseDeviceLimits';
+
 export const IPBITS_LICENSE_KEY_RE =
   /^IPBITS-(1D|7D|30D|90D|365D|1Y|TST|WK|MO|3M|YR)-[A-Z0-9]{4,}$/i;
 
@@ -20,10 +22,11 @@ export function looksLikeIpbitsLicenseKey(raw) {
 }
 
 async function unlockWithLicense(cleanKey) {
+  const deviceId = getOrCreateClientDeviceId();
   const res = await fetch('/api/licenses/verify', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ key: cleanKey, code: cleanKey }),
+    body: JSON.stringify({ key: cleanKey, code: cleanKey, deviceId }),
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok || !(data.ok || data.success) || !data.license) {
@@ -33,10 +36,11 @@ async function unlockWithLicense(cleanKey) {
 }
 
 async function unlockWithVoucher(cleanKey) {
+  const deviceId = getOrCreateClientDeviceId();
   const res = await fetch('/api/vouchers/unlock', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ code: cleanKey, key: cleanKey }),
+    body: JSON.stringify({ code: cleanKey, key: cleanKey, deviceId }),
   });
   const data = await res.json().catch((err) => {
     console.log('Unlock Error:', err);
@@ -60,16 +64,20 @@ export async function unlockAccessKey(rawKey) {
   if (cleanKey.startsWith('IPBITS-') || looksLikeIpbitsLicenseKey(cleanKey)) {
     const licenseResult = await unlockWithLicense(cleanKey);
     if (licenseResult.ok) return licenseResult;
+    // Device limit is definitive — do not fall through to vouchers
+    if (licenseResult.code === 'device_limit') return licenseResult;
     // Fall through to voucher only if license miss (some gift codes may share prefix in tests)
   }
 
   const voucherResult = await unlockWithVoucher(cleanKey);
   if (voucherResult.ok) return voucherResult;
+  if (voucherResult.code === 'device_limit') return voucherResult;
 
   // Non-IPBITS codes: also try licenses (legacy keys without matching regex)
   if (!cleanKey.startsWith('IPBITS-')) {
     const licenseResult = await unlockWithLicense(cleanKey);
     if (licenseResult.ok) return licenseResult;
+    if (licenseResult.code === 'device_limit') return licenseResult;
   }
 
   return { ok: false, error: voucherResult.error || 'invalid_or_used', code: 'invalid_or_used' };

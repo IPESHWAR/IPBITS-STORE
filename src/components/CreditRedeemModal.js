@@ -40,7 +40,11 @@ export default function CreditRedeemModal({
     try {
       const result = await unlockAccessKey(next);
       if (!result.ok || !result.license) {
-        setError(g.gateInvalidKey || '');
+        setError(
+          result.code === 'device_limit' && result.error
+            ? result.error
+            : g.gateInvalidKey || ''
+        );
         return;
       }
       onRedeemed?.(result.license);

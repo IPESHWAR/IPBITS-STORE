@@ -8,6 +8,8 @@ const ERROR_MESSAGES = {
   inactive_key: 'ئەڤ کلیلە نەچالاکە',
   expired_key: 'ئەڤ کلیلە بسەرچووە',
   phone_mismatch: 'ئەڤ کلیل بۆ ڤێ ژمارێ نینە',
+  device_limit:
+    'ئەڤ کلیلە گەهشتییە زۆرترین ڕێژەیا ئامیرێن ڕێگەپێدای بۆ ڤێ بەشداریکردنێ!',
 };
 
 export async function POST(req) {
@@ -17,11 +19,16 @@ export async function POST(req) {
     const result = await activateLicenseKey({
       keyCode: raw,
       phone: body.phone ? normalizePhone(body.phone) : null,
+      deviceId: body.deviceId || body.device_id || null,
     });
 
     if (!result.ok) {
       return NextResponse.json(
-        { error: ERROR_MESSAGES[result.code] || 'Activation failed', code: result.code },
+        {
+          error: result.message || ERROR_MESSAGES[result.code] || 'Activation failed',
+          code: result.code,
+          max_devices: result.max_devices,
+        },
         { status: 400 }
       );
     }

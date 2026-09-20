@@ -51,6 +51,7 @@ export async function POST(req) {
 
     const body = await req.json().catch(() => ({}));
     const enteredCode = normalizeLicenseKeyInput(body.code || body.key || '');
+    const deviceId = body.deviceId || body.device_id || null;
 
     if (!enteredCode) {
       const error = { message: 'missing_code' };
@@ -64,13 +65,27 @@ export async function POST(req) {
     // Chat gate primary path: licenses.license_code / license_keys.key_code
     // via activateLicenseKey (same as /api/licenses/verify).
     if (enteredCode.startsWith('IPBITS-') || isValidIpbitsLicenseFormat(enteredCode)) {
-      const result = await activateLicenseKey({ keyCode: enteredCode });
+      const result = await activateLicenseKey({ keyCode: enteredCode, deviceId });
       if (result.ok) {
         return NextResponse.json({
           ok: true,
           success: true,
           license: result.license,
         });
+      }
+      if (result.code === 'device_limit') {
+        return NextResponse.json(
+          {
+            ok: false,
+            success: false,
+            error:
+              result.message ||
+              'ئەڤ کلیلە گەهشتییە زۆرترین ڕێژەیا ئامیرێن ڕێگەپێدای بۆ ڤێ بەشداریکردنێ!',
+            code: 'device_limit',
+            max_devices: result.max_devices,
+          },
+          { status: 400 }
+        );
       }
       // Fall through to vouchers — bulk/script IPBITS codes live there
       // (code + is_used: false), matching generate-bulk-keys.mjs.

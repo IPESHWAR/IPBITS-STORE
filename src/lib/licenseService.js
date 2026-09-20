@@ -11,6 +11,10 @@ import {
   resolvePlanFromOrderContext,
 } from '@/config/plans';
 import { VIP_POINTS_PER_USD } from '@/lib/vipPoints';
+import {
+  DEVICE_LIMIT_MESSAGE,
+  enforceLicenseDeviceBinding,
+} from '@/lib/licenseDeviceLimits';
 
 function db() {
   return getSupabaseAdmin() || supabaseAdminSingleton;
@@ -403,7 +407,7 @@ async function lookupOrdersLicense(cleanKey) {
   return null;
 }
 
-export async function activateLicenseKey({ keyCode, phone }) {
+export async function activateLicenseKey({ keyCode, phone, deviceId }) {
   if (!db()) {
     throw new Error('Supabase service role is not configured');
   }
@@ -451,9 +455,30 @@ export async function activateLicenseKey({ keyCode, phone }) {
     }
   }
 
+  // Device binding by plan prefix / duration (1D→1, 7D/30D→2, 90D→3, 365D→4)
+  const deviceBind = await enforceLicenseDeviceBinding(db(), {
+    keyCode: cleanKey,
+    deviceId,
+    license,
+  });
+  if (!deviceBind.ok) {
+    return {
+      ok: false,
+      code: 'device_limit',
+      message: deviceBind.message || DEVICE_LIMIT_MESSAGE,
+      max_devices: deviceBind.max_devices,
+      device_ids: deviceBind.device_ids,
+    };
+  }
+
+  const enriched = enrichActivatedLicense(license, cleanKey);
   return {
     ok: true,
-    license: enrichActivatedLicense(license, cleanKey),
+    license: {
+      ...enriched,
+      max_devices: deviceBind.max_devices,
+      device_count: (deviceBind.device_ids || []).length,
+    },
   };
 }
 
