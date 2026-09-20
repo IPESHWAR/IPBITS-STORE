@@ -22,6 +22,8 @@ export function normalizeLicenseKeyInput(raw) {
   return String(raw || '')
     .trim()
     .toUpperCase()
+    // Strip Telegram markdown / copy-paste artifacts around the code
+    .replace(/[`'"“”‘’]/g, '')
     .replace(/\s+/g, '');
 }
 

@@ -4,8 +4,9 @@
  * /api/licenses/verify and chat unlock accept the key.
  */
 import { generateLicenseKey } from '@/lib/generateKey';
-import { createLicenseKey } from '@/lib/licenseService';
+import { createLicenseKey, activateLicenseKey } from '@/lib/licenseService';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
+import { encryptOpenRouterKey } from '@/lib/openRouterKeyCrypto';
 import {
   computePlanExpiresAt,
   resolvePlanFromPlanId,
@@ -206,9 +207,32 @@ async function withTimeout(promise, ms, label) {
   }
 }
 
+function packageTypeForLicenses(tierPrefix, plan) {
+  const byPrefix = {
+    '1D': 'test',
+    '7D': 'weekly',
+    '30D': 'monthly',
+    '90D': '3months',
+    '365D': 'yearly',
+  };
+  if (byPrefix[tierPrefix]) return byPrefix[tierPrefix];
+  if (plan?.id === 'three_months') return '3months';
+  if (['test', 'weekly', 'monthly', '3months', 'yearly'].includes(plan?.id)) return plan.id;
+  return 'weekly';
+}
+
+function pendingOpenRouterCipher() {
+  try {
+    return encryptOpenRouterKey('PENDING_TELEGRAM_CONFIRM');
+  } catch {
+    return 'PENDING_TELEGRAM_CONFIRM';
+  }
+}
+
 /**
  * Register key so /api/licenses/verify + chat unlock succeed.
- * Writes license_keys (primary), vouchers (wallet/unlock fallback), orders (optional).
+ * Primary table: `licenses` (license_code) — matches browser schema.
+ * Also: `license_keys` (key_code) + `vouchers` (is_used: false).
  * Uses SUPABASE_SERVICE_ROLE_KEY via supabaseAdmin (bypasses RLS).
  */
 export async function persistRedeemableLicenseKey({
@@ -227,84 +251,98 @@ export async function persistRedeemableLicenseKey({
   const plan = planForPrefix(tierPrefix);
   const durationDays = Number(plan.duration_days) || 7;
   const planType = plan.plan_type || 'weekly_7d';
+  const packageType = packageTypeForLicenses(tierPrefix, plan);
   const expiresAt = computePlanExpiresAt(durationDays);
   const amountIqd = TIER_IQD[tierPrefix] || Number(plan.price_iqd) || 5000;
+  const creditLimit = Number(plan.credit_limit) || 1.75;
+  // Do not bind the hardcoded Telegram fallback phone — avoids phone_mismatch on unlock
+  const storePhone =
+    phone && phone !== DEFAULT_PHONE ? String(phone).replace(/\D/g, '') || phone : null;
+  const storeName = name && name !== DEFAULT_NAME ? name : null;
   const results = { license_keys: false, vouchers: false, orders: false, licenses: false };
 
-  // 1) license_keys — activateLicenseKey primary legacy path
+  // 1) licenses — EXACT schema from supabase/migrations/009_licenses.sql
+  //    Requires: license_code, openrouter_key, package_type, duration_days, is_active
   try {
-    const payload = {
-      key_code: code,
-      plan_type: planType,
+    const licenseRow = {
+      license_code: code,
+      openrouter_key: pendingOpenRouterCipher(),
+      openrouter_hash: null,
+      package_type: packageType,
       duration_days: durationDays,
-      customer_phone: phone || null,
-      customer_name: name || null,
-      order_id: orderId || null,
-      is_active: true,
+      credit_limit_usd: creditLimit,
       expires_at: expiresAt,
+      is_active: true,
     };
-    let { error } = await supabaseAdmin.from('license_keys').insert(payload);
+    let { error } = await supabaseAdmin.from('licenses').insert(licenseRow);
     if (error && /duplicate|unique|23505/i.test(error.message || '')) {
-      results.license_keys = true;
+      // Already exists — treat as registered
+      results.licenses = true;
     } else if (error) {
-      // Minimal columns fallback
-      ({ error } = await supabaseAdmin.from('license_keys').insert({
+      console.error('[persist] licenses insert failed:', error.message, error.details || '');
+      // Retry without optional columns
+      ({ error } = await supabaseAdmin.from('licenses').insert({
+        license_code: code,
+        openrouter_key: pendingOpenRouterCipher(),
+        package_type: packageType,
+        duration_days: durationDays,
+        is_active: true,
+        expires_at: expiresAt,
+      }));
+      if (error && /duplicate|unique|23505/i.test(error.message || '')) {
+        results.licenses = true;
+      } else if (error) {
+        console.error('[persist] licenses retry failed:', error.message);
+      } else {
+        results.licenses = true;
+      }
+    } else {
+      results.licenses = true;
+    }
+  } catch (err) {
+    console.error('[persist] licenses exception:', err?.message || err);
+  }
+
+  // 2) license_keys — activateLicenseKey second lookup path
+  try {
+    const payloads = [
+      {
+        key_code: code,
+        plan_type: planType,
+        duration_days: durationDays,
+        customer_phone: storePhone,
+        customer_name: storeName,
+        order_id: orderId || null,
+        is_active: true,
+        expires_at: expiresAt,
+      },
+      {
         key_code: code,
         plan_type: planType,
         duration_days: durationDays,
         is_active: true,
-      }));
-      if (error) console.error('[persist] license_keys:', error.message);
-      else results.license_keys = true;
-    } else {
-      results.license_keys = true;
+        expires_at: expiresAt,
+      },
+      {
+        key_code: code,
+        plan_type: planType,
+        duration_days: durationDays,
+        is_active: true,
+      },
+    ];
+    for (const payload of payloads) {
+      const { error } = await supabaseAdmin.from('license_keys').insert(payload);
+      if (!error || /duplicate|unique|23505/i.test(error.message || '')) {
+        results.license_keys = true;
+        break;
+      }
+      console.warn('[persist] license_keys attempt failed:', error.message);
     }
   } catch (err) {
     console.error('[persist] license_keys exception:', err?.message || err);
   }
 
-  // 2) licenses table (canonical) — best effort, schema varies
-  try {
-    const licensePayloads = [
-      {
-        license_code: code,
-        package_type: plan.id || 'weekly',
-        duration_days: durationDays,
-        credit_limit_usd: plan.credit_limit || null,
-        expires_at: expiresAt,
-        is_active: true,
-        customer_phone: phone || null,
-        customer_name: name || null,
-      },
-      {
-        license_code: code,
-        package_type: plan.id || 'weekly',
-        duration_days: durationDays,
-        expires_at: expiresAt,
-        is_active: true,
-      },
-      {
-        license_code: code,
-        is_active: true,
-        duration_days: durationDays,
-      },
-    ];
-    for (const row of licensePayloads) {
-      const { error } = await supabaseAdmin.from('licenses').insert(row);
-      if (!error || /duplicate|unique|23505/i.test(error.message || '')) {
-        results.licenses = true;
-        break;
-      }
-      if (!/column|schema cache|does not exist/i.test(error.message || '')) {
-        console.warn('[persist] licenses:', error.message);
-        break;
-      }
-    }
-  } catch (err) {
-    console.warn('[persist] licenses exception:', err?.message || err);
-  }
-
-  // 3) vouchers — wallet redeem + /api/vouchers/unlock fallback
+  // 3) vouchers — wallet / unlock fallback (is_used: false)
   try {
     const voucherPayloads = [
       { code, amount_iqd: amountIqd, is_used: false, is_printed: false, status: 'available' },
@@ -329,7 +367,7 @@ export async function persistRedeemableLicenseKey({
   // 4) Stamp order row
   if (orderId) {
     try {
-      const { error } = await supabaseAdmin
+      let { error } = await supabaseAdmin
         .from('orders')
         .update({
           license_key: code,
@@ -340,28 +378,50 @@ export async function persistRedeemableLicenseKey({
         })
         .eq('id', orderId);
       if (error) {
-        await supabaseAdmin
+        ({ error } = await supabaseAdmin
           .from('orders')
           .update({
             license_key: code,
             status: 'approved',
             updated_at: new Date().toISOString(),
           })
-          .eq('id', orderId);
+          .eq('id', orderId));
       }
-      results.orders = true;
+      if (!error) results.orders = true;
     } catch (err) {
       console.warn('[persist] orders exception:', err?.message || err);
     }
   }
 
-  const ok = results.license_keys || results.licenses || results.vouchers;
-  console.log('[telegramConfirmInstant] persist result', { code, ...results, ok });
-  return { ok, results, planType, durationDays, amountIqd };
+  // 5) Self-check: can activateLicenseKey find this code?
+  let verified = false;
+  try {
+    const check = await activateLicenseKey({ keyCode: code });
+    verified = !!check?.ok;
+    if (!verified) {
+      console.error('[persist] post-insert activateLicenseKey FAILED', check?.code, {
+        licenses: results.licenses,
+        license_keys: results.license_keys,
+        vouchers: results.vouchers,
+      });
+    }
+  } catch (err) {
+    console.error('[persist] verify exception:', err?.message || err);
+  }
+
+  const ok = results.licenses || results.license_keys || results.vouchers;
+  console.log('[telegramConfirmInstant] persist result', {
+    code,
+    ...results,
+    verified,
+    ok,
+  });
+  return { ok, verified, results, planType, durationDays, amountIqd, packageType };
 }
 
 /**
- * Issue a redeemable key: prefer createLicenseKey (OpenRouter + DB), else local + persist.
+ * Issue a redeemable key: prefer createLicenseKey (OpenRouter + licenses),
+ * always ensure `licenses` + `license_keys` + `vouchers` rows exist.
  */
 export async function issueRedeemableConfirmKey({
   tierPrefix,
@@ -371,23 +431,22 @@ export async function issueRedeemableConfirmKey({
 }) {
   const plan = planForPrefix(tierPrefix);
 
-  // Prefer full provisioning path (licenses + license_keys)
+  // Prefer full provisioning (writes licenses with real openrouter_key)
   try {
     const license = await withTimeout(
       createLicenseKey({
         planType: plan.plan_type || plan.id || tierPrefix,
         durationDays: plan.duration_days,
         planSuffix: tierPrefix,
-        customerPhone: phone,
-        customerName: name,
+        customerPhone: phone && phone !== DEFAULT_PHONE ? phone : null,
+        customerName: name && name !== DEFAULT_NAME ? name : null,
         orderId,
       }),
       12000,
       'createLicenseKey'
     );
     if (license?.key_code) {
-      // Also mirror into vouchers for wallet unlock forms
-      await persistRedeemableLicenseKey({
+      const persist = await persistRedeemableLicenseKey({
         code: license.key_code,
         tierPrefix,
         name,
@@ -397,7 +456,9 @@ export async function issueRedeemableConfirmKey({
       return {
         code: license.key_code,
         source: license.source || 'createLicenseKey',
-        registered: true,
+        registered: !!(persist.ok || persist.verified),
+        verified: !!persist.verified,
+        persist,
       };
     }
   } catch (err) {
@@ -407,7 +468,7 @@ export async function issueRedeemableConfirmKey({
     );
   }
 
-  // Guaranteed local key + explicit Supabase registration
+  // Guaranteed local key + exact licenses schema insert (openrouter_key placeholder)
   const code = generateSept19LicenseKey(tierPrefix);
   const persist = await persistRedeemableLicenseKey({
     code,
@@ -420,6 +481,7 @@ export async function issueRedeemableConfirmKey({
     code,
     source: 'local+persist',
     registered: !!persist.ok,
+    verified: !!persist.verified,
     persist,
   };
 }
@@ -469,6 +531,7 @@ export async function handleInstantConfirmCallback(cq) {
       phone,
       source: issued.source,
       registered: issued.registered,
+      verified: issued.verified,
     });
 
     if (messageId && chatId != null) {
@@ -488,10 +551,10 @@ export async function handleInstantConfirmCallback(cq) {
     // Always send key to admin (even if DB registration partially failed)
     await sendPlainMessage(chatId, buildSept19Message({ keyCode: code, name, phone }));
 
-    if (!issued.registered) {
+    if (!issued.registered || issued.verified === false) {
       await sendPlainMessage(
         chatId,
-        `⚠️ ئاگاهداری: کلیل هاتە دروستکرن بەلێ تۆمارکرنا د داتابەیسێ دا تەواو نەبوو. تکایە د لۆگان دا چاڤلێکە.\n\`${code}\``
+        `⚠️ ئاگاهداری: کلیل هاتە دروستکرن بەلێ تۆمارکرنا د داتابەیسێ دا تەواو نەبوو / verify سەرنەکەوت.\n\`${code}\`\n(پێدڤیە SUPABASE_SERVICE_ROLE_KEY ل سێرڤەری هەبیت)`
       );
     }
 
@@ -503,6 +566,7 @@ export async function handleInstantConfirmCallback(cq) {
       name,
       phone,
       registered: issued.registered,
+      verified: issued.verified,
       source: issued.source,
     };
   } catch (err) {

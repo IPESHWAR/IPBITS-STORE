@@ -10,6 +10,8 @@ export function normalizeAccessKeyInput(raw) {
   return String(raw || '')
     .trim()
     .toUpperCase()
+    // Strip Telegram markdown backticks / quotes when pasting from Confirm reply
+    .replace(/[`'"“”‘’]/g, '')
     .replace(/\s+/g, '');
 }
 
