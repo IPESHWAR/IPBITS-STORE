@@ -766,6 +766,17 @@ export default function StorePage() {
                         <span className={`lm-tier-name text-xs sm:text-sm font-bold tracking-tight ${isSelected ? 'text-emerald-700 dark:text-emerald-300' : ''}`}>
                           {tierLang.name}
                         </span>
+                        {tierLang.devices ? (
+                          <span
+                            className={`inline-flex w-fit max-w-full items-center rounded-full border px-1.5 py-0.5 text-[9px] sm:text-[10px] font-medium leading-tight tracking-tight ${
+                              isSelected
+                                ? 'border-emerald-300/70 bg-emerald-50 text-emerald-800 dark:border-emerald-500/35 dark:bg-emerald-500/10 dark:text-emerald-300'
+                                : 'border-slate-200 bg-slate-50 text-slate-600 dark:border-white/10 dark:bg-white/[0.04] dark:text-zinc-400'
+                            }`}
+                          >
+                            {tierLang.devices}
+                          </span>
+                        ) : null}
                         <div className="flex flex-col gap-0.5">
                           <span className={`lm-tier-price text-sm font-extrabold tabular-nums ${isSelected ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-800 dark:text-zinc-200'}`}>
                             {formatPrice(lang, tierData.priceIQD, tierData.priceUSD)}
