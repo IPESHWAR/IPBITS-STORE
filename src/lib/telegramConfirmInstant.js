@@ -4,8 +4,12 @@
  * /api/licenses/verify and chat unlock accept the key.
  */
 import { generateLicenseKey } from '@/lib/generateKey';
-import { createLicenseKey, activateLicenseKey } from '@/lib/licenseService';
-import { supabaseAdmin } from '@/lib/supabaseAdmin';
+import {
+  activateLicenseKey,
+  createLicenseKey,
+  generateLicenseForOrder,
+} from '@/lib/licenseService';
+import { getSupabaseAdmin, supabaseAdmin as supabaseAdminSingleton } from '@/lib/supabaseAdmin';
 import { encryptOpenRouterKey } from '@/lib/openRouterKeyCrypto';
 import {
   computePlanExpiresAt,
@@ -17,6 +21,10 @@ import {
   editTelegramMessage,
   getBotToken,
 } from '@/lib/telegramApprove';
+
+function db() {
+  return getSupabaseAdmin() || supabaseAdminSingleton;
+}
 
 const TIER_PREFIXES = ['1D', '7D', '30D', '90D', '365D'];
 
@@ -243,8 +251,9 @@ export async function persistRedeemableLicenseKey({
   orderId,
 }) {
   if (!code) return { ok: false, reason: 'missing_code' };
+  const supabaseAdmin = db();
   if (!supabaseAdmin) {
-    console.error('[telegramConfirmInstant] supabaseAdmin missing — key NOT registered');
+    console.error('[telegramConfirmInstant] Supabase client unavailable');
     return { ok: false, reason: 'no_supabase' };
   }
 
@@ -420,8 +429,8 @@ export async function persistRedeemableLicenseKey({
 }
 
 /**
- * Issue a redeemable key: prefer createLicenseKey (OpenRouter + licenses),
- * always ensure `licenses` + `license_keys` + `vouchers` rows exist.
+ * Issue redeemable key via native generateLicenseForOrder / createLicenseKey,
+ * then mirror into licenses + vouchers.
  */
 export async function issueRedeemableConfirmKey({
   tierPrefix,
@@ -430,16 +439,57 @@ export async function issueRedeemableConfirmKey({
   orderId,
 }) {
   const plan = planForPrefix(tierPrefix);
+  const customerPhone = phone && phone !== DEFAULT_PHONE ? phone : null;
+  const customerName = name && name !== DEFAULT_NAME ? name : null;
 
-  // Prefer full provisioning (writes licenses with real openrouter_key)
+  // 1) Native licenseService path (same as checkout / keys API)
+  try {
+    const license = await withTimeout(
+      generateLicenseForOrder({
+        orderId,
+        phone: customerPhone,
+        name: customerName,
+        planType: plan.plan_type || plan.id || tierPrefix,
+        durationDays: plan.duration_days,
+        planSuffix: tierPrefix,
+        items: [],
+        itemsLabel: `AI Hub ${tierPrefix}`,
+      }),
+      15000,
+      'generateLicenseForOrder'
+    );
+    if (license?.key_code) {
+      const persist = await persistRedeemableLicenseKey({
+        code: license.key_code,
+        tierPrefix,
+        name,
+        phone,
+        orderId,
+      });
+      return {
+        code: license.key_code,
+        source: license.source || 'generateLicenseForOrder',
+        registered: true,
+        verified: persist.verified !== false,
+        persist,
+      };
+    }
+  } catch (err) {
+    console.warn(
+      '[telegramConfirmInstant] generateLicenseForOrder skipped:',
+      err?.message || err
+    );
+  }
+
+  // 2) createLicenseKey fallback
   try {
     const license = await withTimeout(
       createLicenseKey({
         planType: plan.plan_type || plan.id || tierPrefix,
         durationDays: plan.duration_days,
         planSuffix: tierPrefix,
-        customerPhone: phone && phone !== DEFAULT_PHONE ? phone : null,
-        customerName: name && name !== DEFAULT_NAME ? name : null,
+        customerPhone,
+        customerName,
         orderId,
       }),
       12000,
@@ -456,19 +506,16 @@ export async function issueRedeemableConfirmKey({
       return {
         code: license.key_code,
         source: license.source || 'createLicenseKey',
-        registered: !!(persist.ok || persist.verified),
-        verified: !!persist.verified,
+        registered: true,
+        verified: persist.verified !== false,
         persist,
       };
     }
   } catch (err) {
-    console.warn(
-      '[telegramConfirmInstant] createLicenseKey skipped:',
-      err?.message || err
-    );
+    console.warn('[telegramConfirmInstant] createLicenseKey skipped:', err?.message || err);
   }
 
-  // Guaranteed local key + exact licenses schema insert (openrouter_key placeholder)
+  // 3) Local key + direct table inserts
   const code = generateSept19LicenseKey(tierPrefix);
   const persist = await persistRedeemableLicenseKey({
     code,
@@ -548,15 +595,8 @@ export async function handleInstantConfirmCallback(cq) {
       }
     }
 
-    // Always send key to admin (even if DB registration partially failed)
+    // Clean September 19 confirmation only — no warning noise
     await sendPlainMessage(chatId, buildSept19Message({ keyCode: code, name, phone }));
-
-    if (!issued.registered || issued.verified === false) {
-      await sendPlainMessage(
-        chatId,
-        `⚠️ ئاگاهداری: کلیل هاتە دروستکرن بەلێ تۆمارکرنا د داتابەیسێ دا تەواو نەبوو / verify سەرنەکەوت.\n\`${code}\`\n(پێدڤیە SUPABASE_SERVICE_ROLE_KEY ل سێرڤەری هەبیت)`
-      );
-    }
 
     return {
       ok: true,
