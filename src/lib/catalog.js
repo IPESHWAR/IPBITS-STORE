@@ -382,10 +382,10 @@ export const LOCKED_PRODUCTS = [
     brandIcon: 'apple_gift',
     deliveryType: 'instant',
     plans: [
-      { id: 'apple-gift-7', duration: '$7', price_iqd: usdToIqd(7), price_usd: 7.0 },
-      { id: 'apple-gift-10', duration: '$10', price_iqd: usdToIqd(10), price_usd: 10.0 },
-      { id: 'apple-gift-25', duration: '$25', price_iqd: usdToIqd(25), price_usd: 25.0 },
-      { id: 'apple-gift-50', duration: '$50', price_iqd: usdToIqd(50), price_usd: 50.0 },
+      { id: 'apple-gift-5', duration: '$5', price_iqd: usdToIqd(7), price_usd: 7.0 },
+      { id: 'apple-gift-7', duration: '$7', price_iqd: usdToIqd(10), price_usd: 10.0 },
+      { id: 'apple-gift-20', duration: '$20', price_iqd: usdToIqd(25), price_usd: 25.0 },
+      { id: 'apple-gift-50', duration: '$50', price_iqd: usdToIqd(55), price_usd: 55.0 },
     ],
   },
   {
@@ -492,9 +492,9 @@ const PLAN_ID_ALIASES = {
   'youtube-1m': ['youtube_1m'],
   'youtube-3m': ['youtube_3m'],
   'youtube-12m': ['youtube_12m'],
-  'apple-gift-7': ['apple_gift_7', 'apple-gift-card-7', 'apple-gift-5', 'apple_gift_5'],
-  'apple-gift-10': ['apple_gift_10', 'apple-gift-card-10'],
-  'apple-gift-25': ['apple_gift_25', 'apple-gift-card-25'],
+  'apple-gift-5': ['apple_gift_5', 'apple-gift-card-5'],
+  'apple-gift-7': ['apple_gift_7', 'apple-gift-card-7', 'apple-gift-10', 'apple_gift_10'],
+  'apple-gift-20': ['apple_gift_20', 'apple-gift-card-20', 'apple-gift-25', 'apple_gift_25'],
   'apple-gift-50': ['apple_gift_50', 'apple-gift-card-50'],
 };
 
