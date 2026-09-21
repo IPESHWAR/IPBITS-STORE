@@ -173,6 +173,25 @@ export const LOCKED_PRODUCTS = [
     ],
   },
   {
+    id: 'higgsfield',
+    name: 'Higgsfield AI',
+    subtitle: {
+      ku: 'دروستکرنا ڤیدیۆ و وێنە ب ژیرییا دەستکرد',
+      ar: 'توليد فيديو وصور بالذكاء الاصطناعي',
+      en: 'AI video & image generation',
+    },
+    priceIQD: usdToIqd(9),
+    priceUSD: 9,
+    filterGroup: 'ai',
+    brandColor: '#7C3AED',
+    brandIcon: 'higgsfield',
+    deliveryType: 'instant',
+    plans: [
+      { id: 'higgsfield-1m', duration: '١ مەهـ', price_iqd: usdToIqd(9), price_usd: 9.0 },
+      { id: 'higgsfield-1m-37', duration: '١ مەهـ', price_iqd: usdToIqd(37), price_usd: 37.0 },
+    ],
+  },
+  {
     id: 'canva',
     name: 'Canva Pro',
     subtitle: {
@@ -442,6 +461,7 @@ const SLUG_ALIASES = {
   midjourney: ['mid-journey', 'mj'],
   perplexity: ['perplexity-ai', 'perplexity_pro'],
   elevenlabs: ['eleven-labs', 'eleven_labs'],
+  higgsfield: ['higgsfield-ai', 'higgsfield_ai', 'higgs-field'],
   youtube_music: ['youtube', 'youtube-premium', 'youtube_premium'],
   apple_music: ['apple-music', 'applemusic'],
   apple_gift_card: ['apple-gift', 'apple-gift-card', 'apple_gift', 'applegift'],
@@ -479,6 +499,8 @@ const PLAN_ID_ALIASES = {
   'kling-1m': ['kling_1m'],
   'kling-1m-45': ['kling-3m', 'kling_3m'],
   'kling-1m-105': ['kling-12m', 'kling_12m'],
+  'higgsfield-1m': ['higgsfield_1m', 'higgsfield-9'],
+  'higgsfield-1m-37': ['higgsfield_1m_37', 'higgsfield-37'],
   'shahid-1m': ['shahid_1m'],
   'shahid-1m-9': ['shahid-12m', 'shahid_12m'],
   'apple-music-1m': ['apple_music_1m', 'apple-music-12m', 'apple_music_12m'],

@@ -7,6 +7,7 @@ const BRAND_LOGO_SRC = {
   canva: '/canva.png',
   capcut: '/capcut-logo.webp',
   kling: '/kling.png',
+  higgsfield: '/higgsfield-seeklogo.svg',
   claude: '/claude.png',
   shahid: '/shahid.png',
   paypal: '/paypal.png',

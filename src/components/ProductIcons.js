@@ -35,6 +35,7 @@ export function ProductIcon({ name = '', className = 'w-7 h-7' }) {
   else if (raw.includes('shahid')) key = 'shahid';
   else if (raw.includes('paypal')) key = 'paypal';
   else if (raw.includes('kling')) key = 'kling';
+  else if (raw.includes('higgsfield') || raw.includes('higgs field')) key = 'higgsfield';
   else if (raw.includes('netflix')) key = 'netflix';
   else if (raw.includes('youtube')) key = 'youtube music';
   else if (raw.includes('apple music')) key = 'apple music';

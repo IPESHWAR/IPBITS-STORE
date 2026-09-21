@@ -15,6 +15,7 @@ const PUBLIC_LOGO_CANDIDATES = {
   shahid: ['/shahid.png'],
   shahid_vip: ['/shahid.png'],
   kling: ['/kling.png', '/kling-ai-icon-logo-png_seeklogo-673995.png'],
+  higgsfield: ['/higgsfield-seeklogo.svg'],
   paypal: ['/paypal.png'],
   elevenlabs: ['/ElevenLabs_logo_(2022-2024).png'],
   apple_gift: ['/apple-gift-card.svg'],
@@ -41,6 +42,7 @@ function resolveBrandKey(name = '', brandIcon = '') {
   if (raw.includes('shahid')) return 'shahid';
   if (raw.includes('gemini')) return 'gemini';
   if (raw.includes('kling')) return 'kling';
+  if (raw.includes('higgsfield') || raw.includes('higgs field')) return 'higgsfield';
   if (raw.includes('paypal')) return 'paypal';
   if (raw.includes('elevenlabs') || raw.includes('eleven labs')) return 'elevenlabs';
   if (raw.includes('gift') && raw.includes('apple')) return 'apple_gift';
