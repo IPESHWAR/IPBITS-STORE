@@ -278,7 +278,7 @@ export default function Navbar({ onOpenCatalog }) {
           aria-modal="true"
           aria-label={m.menu}
           dir={isRtl ? 'rtl' : 'ltr'}
-          className={`fixed z-50 ${panelEdge} h-[100dvh] max-h-[100dvh] w-[320px] max-w-[85vw] sm:max-w-sm flex flex-col justify-between overflow-hidden pt-5 px-5 bg-[#0a0f12] text-white shadow-2xl border-white/10 transform transition-transform duration-300 ease-in-out will-change-transform ${
+          className={`fixed z-50 ${panelEdge} h-[100dvh] max-h-[100dvh] w-[320px] max-w-[85vw] sm:max-w-sm flex flex-col justify-start gap-3 overflow-y-auto pt-5 px-5 bg-[#0a0f12] text-white shadow-2xl border-white/10 transform transition-transform duration-300 ease-in-out will-change-transform ${
             drawerVisible ? 'translate-x-0' : closedTranslate
           }`}
         >
@@ -351,7 +351,7 @@ export default function Navbar({ onOpenCatalog }) {
 
           {/* Middle nav — fills remaining space, scrolls if needed */}
           <nav
-            className="flex-1 min-h-0 overflow-y-auto flex flex-col gap-1 py-3"
+            className="shrink-0 flex flex-col gap-1 py-3"
             aria-label={m.menu}
           >
             <a href="/#pricing" onClick={(e) => handleSectionClick(e, 'pricing')} className={`${NAV_ROW} text-start`}>
