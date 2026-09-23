@@ -53,6 +53,8 @@ export function CheckoutModal({
   setCustomerName,
   contactValue,
   setContactValue,
+  email,
+  setEmail,
   paymentMethod,
   setPaymentMethod,
   transactionId,
@@ -363,6 +365,20 @@ export function CheckoutModal({
                         placeholder={s.contactPlaceholder}
                         className={INPUT}
                         autoComplete="tel"
+                      />
+                    </label>
+
+                    <label className="block space-y-1">
+                      <span className="text-[11px] font-medium text-slate-600 dark:text-zinc-400">
+                        {s.emailLabel}
+                      </span>
+                      <input
+                        type="email"
+                        value={email || ''}
+                        onChange={(e) => setEmail?.(e.target.value)}
+                        placeholder={s.emailPlaceholder}
+                        className={INPUT}
+                        autoComplete="email"
                       />
                     </label>
                   </div>

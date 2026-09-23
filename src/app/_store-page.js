@@ -106,6 +106,7 @@ export default function StorePage() {
   const [checkoutOpen, setCheckoutOpen] = useState(false);
   const [customerName, setCustomerName] = useState('');
   const [contactValue, setContactValue] = useState('');
+  const [email, setEmail] = useState('');
   const [optionalNote, setOptionalNote] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('FIB');
   const [transactionId, setTransactionId] = useState('');
@@ -345,6 +346,7 @@ export default function StorePage() {
     setPurchaseToast('');
     setCustomerName('');
     setContactValue('');
+    setEmail('');
     setOptionalNote('');
     setTransactionId('');
     setReceiptImage(null);
@@ -426,6 +428,7 @@ export default function StorePage() {
     const orderDetails = {
       name: customerName.trim(),
       phone: cleanContact,
+      email: email.trim(),
       note: optionalNote.trim() || undefined,
       paymentMethod,
       transactionId: String(transactionId || '').trim(),
@@ -1013,6 +1016,8 @@ export default function StorePage() {
         setCustomerName={setCustomerName}
         contactValue={contactValue}
         setContactValue={setContactValue}
+        email={email}
+        setEmail={setEmail}
         paymentMethod={paymentMethod}
         setPaymentMethod={setPaymentMethod}
         transactionId={transactionId}
@@ -1103,7 +1108,10 @@ export default function StorePage() {
                 setNotifyLoading(false);
                 setNotifyDone(true);
               }}>
-                <input required type="text" value={notifyContact} onChange={e => setNotifyContact(e.target.value)} placeholder={s.notifyPlaceholder}
+                <label htmlFor="notify-email" className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
+                  {s.emailLabel}
+                </label>
+                <input id="notify-email" required type="email" value={notifyContact} onChange={e => setNotifyContact(e.target.value)} placeholder={s.emailPlaceholder}
                   className="w-full bg-white text-slate-900 placeholder-slate-400 border border-slate-300 dark:bg-slate-950 dark:text-white dark:placeholder-slate-500 dark:border-slate-700 rounded-xl px-3 py-2.5 text-xs focus:outline-none focus:border-emerald-500 mb-3 transition-colors" />
                 <button type="submit" disabled={notifyLoading}
                   className={`${BTN_PRIMARY} w-full py-2.5 text-xs`}>
